@@ -1,0 +1,8 @@
+rvcc
+*.o
+*.s
+
+Makefile
+*.sh
+
+tmp*
