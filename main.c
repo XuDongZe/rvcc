@@ -1,5 +1,97 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <stdarg.h>
+#include <string.h>
+#include <stdbool.h>
+
+typedef enum
+{
+    TOK_OP, // 操作符号
+    TOK_NUM,
+    TOK_EOF, // 文件终止符
+} TokenKind;
+
+static void error(char *fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    vfprintf(stderr, fmt, va);
+    fprintf(stderr, "\n");
+    va_end(va);
+    exit(1);
+}
+
+typedef struct Token
+{
+    TokenKind kind;
+    struct Token *next;
+    long val;
+    char *loc; //在当前解析的字符串内的起始位置
+    int len;   // 字符长度
+} Token;
+
+static Token *newToken(TokenKind kind, char *start, char *end)
+{
+    Token *tok = malloc(sizeof(Token));
+    if (tok == NULL) {
+        error("malloc mem for tok failed.");
+    }
+    tok->kind = kind;
+    tok->loc = start;
+    tok->len = end - start;
+    return tok;
+}
+
+static bool equal(Token *tok, char *str)
+{
+    return memcmp(tok->loc, str, tok->len) == 0 && str[tok->len] == '\0';
+}
+
+static long getNumber(Token *tok)
+{
+    if (tok->kind != TOK_NUM)
+    {
+        error("expect a number");
+    }
+    return tok->val;
+}
+
+static Token *tokenize(char *p)
+{
+    Token head = {};
+    Token *cur = &head;
+
+    while (*p)
+    {
+        if (isspace(*p))
+        {
+            p++;
+            continue;
+        }
+        if (isdigit(*p))
+        {
+            char *startP = p;
+            int val = strtol(p, &p, 10);
+            Token * tok = newToken(TOK_NUM, startP, p);
+            tok->val = val;
+            cur->next = tok;
+            cur = cur->next;
+            continue;
+        }
+        if (*p == '+' || *p == '-')
+        {
+            Token *tok = newToken(TOK_NUM, p, p + 1);
+            cur->next = tok;
+            cur = cur->next;
+            p++;
+            continue;
+        }
+        error("invalid token: %c", *p);
+    }
+    cur->next = newToken(TOK_EOF, p, p);
+    return head.next;
+}
 
 int main(int argc, char const *argv[])
 {
@@ -9,27 +101,29 @@ int main(int argc, char const *argv[])
         return 1;
     }
 
-    char *p = argv[1];
+    Token *tok = tokenize(argv[1]);
 
     printf("  .global main\n");
     printf("main:\n");
-    printf("  li a0, %ld\n", strtol(p, &p, 10));
-    while (*p)
+    printf("  li a0, %ld\n", getNumber(tok));
+    tok = tok->next;
+
+    while (tok->kind != TOK_EOF)
     {
-        if (*p == '+')
+        if (equal(tok, "+"))
         {
-            p++;
-            printf("  addi a0, a0, %ld\n", strtol(p, &p, 10));
+            tok = tok->next;
+            printf("  addi a0, a0, %ld\n", getNumber(tok));
+            tok = tok->next;
             continue;
         }
-        if (*p == '-')
+        if (equal(tok, "-"))
         {
-            p++;
-            printf(" addi a0, a0, -%ld\n", strtol(p, &p, 10));
+            tok = tok->next;
+            printf(" addi a0, a0, -%ld\n", getNumber(tok));
+            tok = tok->next;
             continue;
         }
-        fprintf(stderr, "unexpected character: '%c'\n", *p);
-        return 1;
     }
     printf("  ret\n");
     return 0;
