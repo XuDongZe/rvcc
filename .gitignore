@@ -2,3 +2,4 @@ rvcc
 *.o
 *.s
 tmp*
+.vscode/*
