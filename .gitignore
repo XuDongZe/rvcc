@@ -3,3 +3,5 @@ rvcc
 *.s
 tmp*
 .vscode/*
+main
+main.o
