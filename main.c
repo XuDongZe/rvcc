@@ -22,10 +22,12 @@ typedef enum
     ND_MUL, // *
     ND_DIV, // /
     ND_NUM, // 整数
+    ND_NEG, // 取相反数
 } NodeKind;
 
 typedef struct Node Node;
-struct Node {
+struct Node
+{
     NodeKind kind;
     struct Node *lhs; // left-hand side
     struct Node *rhs; // right-hand side
@@ -44,6 +46,13 @@ static Node *newBinary(NodeKind kind, Node *l, Node *r)
     Node *node = newNode(kind);
     node->lhs = l;
     node->rhs = r;
+    return node;
+}
+
+static Node *newUnary(NodeKind kind, Node *n)
+{
+    Node *node = newNode(kind);
+    node->lhs = n;
     return node;
 }
 
@@ -128,54 +137,14 @@ static long getNumber(Token *tok)
     return tok->val;
 }
 
+// expr = mul ("+" mul | "-" mul)*
+// mul = unary ("*" unary | "/" unary)*
+// unary = ("+" | "-") unary | primary
+// primary = "(" expr ")" | num
 static Node *expr(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
+static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
-
-// primary = "(" expr ")" | num
-static Node *primary(Token **rest, Token *tok)
-{
-    // "(" expr ")"
-    if (equal(tok, "("))
-    {
-        Node *node = expr(&tok, tok->next);
-        *rest = skip(tok, ")");
-        return node;
-    }
-    // num
-    if (tok->kind == TOK_NUM)
-    {
-        Node *node = newNum(tok->val);
-        *rest = tok->next;
-        return node;
-    }
-    errorAt(tok->loc, "expected an expression");
-}
-
-// mul = primary ("*" primary | "/" primary)*
-static Node *mul(Token **rest, Token *tok)
-{
-    // primary
-    Node *node = primary(&tok, tok);
-    // ("*" primary | "/" primary)*
-    while (true)
-    {
-        // "*" primary
-        if (equal(tok, "*"))
-        {
-            node = newBinary(ND_MUL, node, primary(&tok, tok->next));
-            continue;
-        }
-        if (equal(tok, "/"))
-        {
-            node = newBinary(ND_DIV, node, primary(&tok, tok->next));
-            continue;
-        }
-
-        *rest = tok;
-        return node;
-    }
-}
 
 // expr = mul ("+" mul | "-" mul)*
 static Node *expr(Token **rest, Token *tok)
@@ -201,6 +170,70 @@ static Node *expr(Token **rest, Token *tok)
         *rest = tok;
         return node;
     }
+    errorAt(tok->loc, "expected an expression");
+}
+
+// mul = unary ("*" unary | "/" unary)*
+static Node *mul(Token **rest, Token *tok)
+{
+    // unary
+    Node *node = unary(&tok, tok);
+    // ("*" unary | "/" unary)*
+    while (true)
+    {
+        // "*" unary
+        if (equal(tok, "*"))
+        {
+            node = newBinary(ND_MUL, node, unary(&tok, tok->next));
+            continue;
+        }
+        if (equal(tok, "/"))
+        {
+            node = newBinary(ND_DIV, node, unary(&tok, tok->next));
+            continue;
+        }
+
+        *rest = tok;
+        return node;
+    }
+}
+
+// unary = ("+" | "-") unary | primary
+// 解析一元运算
+static Node *unary(Token **rest, Token *tok)
+{
+    // "+" unary
+    if (equal(tok, "+"))
+    {
+        return unary(rest, tok->next);
+    }
+    // "-" unary
+    if (equal(tok, "-"))
+    {
+        return newUnary(ND_NEG, unary(rest, tok->next));
+    }
+    // primary
+    return primary(rest, tok);
+}
+
+// primary = "(" expr ")" | num
+static Node *primary(Token **rest, Token *tok)
+{
+    // "(" expr ")"
+    if (equal(tok, "("))
+    {
+        Node *node = expr(&tok, tok->next);
+        *rest = skip(tok, ")");
+        return node;
+    }
+    // num
+    if (tok->kind == TOK_NUM)
+    {
+        Node *node = newNum(tok->val);
+        *rest = tok->next;
+        return node;
+    }
+    errorAt(tok->loc, "expected an expression");
 }
 
 // 语义分析与代码生成
@@ -231,17 +264,35 @@ static void pop(char *reg)
 
 static void genExpr(Node *node)
 {
-    if (node->kind == ND_NUM)
+    switch (node->kind)
     {
+    case ND_NUM:
         printf(" li a0, %d\n", node->val);
         return;
+    case ND_NEG:
+        // 子树代码生成
+        genExpr(node->lhs);
+        // 此时子树的结果保存在a0中。
+        // 最后对结果取反
+        printf(" neg a0, a0\n");
+        return;
+    default:
+        break;
     }
 
+    // 递归到最右节点
     genExpr(node->rhs);
+    // 右节点结果压栈
     push();
+    // 递归到左节点
     genExpr(node->lhs);
+    // 此时左节点结果没有压栈，只保存在a0中。
+    // 将之前右节点压栈的结果，弹栈到a1
     pop("a1");
 
+
+    // 左右节点结果均处理完毕，并且保存在寄存器中：左节点在a0，右节点在a1中。
+    // 根据节点类型，运算。
     switch (node->kind)
     {
     case ND_ADD:
@@ -262,7 +313,8 @@ static void genExpr(Node *node)
     }
 }
 
-static bool isPunct(char p) {
+static bool isPunct(char p)
+{
     return p == '+' || p == '-' || p == '*' || p == '/' || p == '(' || p == ')';
 }
 
@@ -315,7 +367,8 @@ int main(int argc, char *argv[])
     Token *tok = tokenize(currentInput);
 
     Node *node = expr(&tok, tok);
-    if (tok->kind != TOK_EOF) {
+    if (tok->kind != TOK_EOF)
+    {
         errorAt(tok->loc, "extra token: %d", tok->kind);
     }
 
@@ -325,7 +378,7 @@ int main(int argc, char *argv[])
 
     // 便利AST树生成汇编代码
     genExpr(node);
-    
+
     printf(" ret\n");
 
     // 如果stack未清空 报错
