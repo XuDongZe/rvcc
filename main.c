@@ -23,6 +23,12 @@ typedef enum
     ND_DIV, // /
     ND_NUM, // 整数
     ND_NEG, // 取相反数
+    ND_EQ,  // 相等
+    ND_NEQ, // 不等
+    ND_LT,  // 小于
+    ND_LET, // 小于等于
+    ND_GT,  // 大于
+    ND_GET, // 大于等于
 } NodeKind;
 
 typedef struct Node Node;
@@ -137,17 +143,87 @@ static long getNumber(Token *tok)
     return tok->val;
 }
 
-// expr = mul ("+" mul | "-" mul)*
+// expr = equality
+// equality = relational ("==" relational || "!=" relational)*
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+// add = mul ("*" mul | "/" mul)
 // mul = unary ("*" unary | "/" unary)*
 // unary = ("+" | "-") unary | primary
 // primary = "(" expr ")" | num
 static Node *expr(Token **rest, Token *tok);
+static Node *equality(Token **rest, Token *tok);
+static Node *relational(Token **rest, Token *tok);
+static Node *add(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
-// expr = mul ("+" mul | "-" mul)*
+// expr = equality
 static Node *expr(Token **rest, Token *tok)
+{
+    return equality(rest, tok);
+}
+
+// equality = relational ("==" relational | "!=" relational)*
+static Node *equality(Token **rest, Token *tok)
+{
+    // relational
+    Node *node = relational(&tok, tok);
+    // "!=" relational || "==" relational
+    while (true)
+    {
+        if (equal(tok, "=="))
+        {
+            node = newBinary(ND_EQ, node, relational(&tok, tok->next));
+            continue;
+        }
+        if (equal(tok, "!="))
+        {
+            node = newBinary(ND_NEQ, node, relational(&tok, tok->next));
+            continue;
+        }
+
+        *rest = tok;
+        return node;
+    }
+}
+
+// realational = add ("<" add | "<=" add | ">" add | ">=" add)*
+static Node *relational(Token **rest, Token *tok)
+{
+    // add
+    Node *node = add(&tok, tok);
+    // ("<" add | "<=" add | ">" add | ">=" add)
+    while (true)
+    {
+        if (equal(tok, "<"))
+        {
+            node = newBinary(ND_LT, node, add(&tok, tok->next));
+            continue;
+        }
+        if (equal(tok, "<="))
+        {
+            node = newBinary(ND_LET, node, add(&tok, tok->next));
+            continue;
+        }
+        if (equal(tok, ">"))
+        {
+            node = newBinary(ND_GT, node, add(&tok, tok->next));
+            continue;
+        }
+        if (equal(tok, ">="))
+        {
+            node = newBinary(ND_GET, node, add(&tok, tok->next));
+            continue;
+        }
+
+        *rest = tok;
+        return node;
+    }
+}
+
+// add = mul ("+" mul | "-" mul)*
+static Node *add(Token **rest, Token *tok)
 {
     // mul
     Node *node = mul(&tok, tok);
@@ -158,7 +234,6 @@ static Node *expr(Token **rest, Token *tok)
         {
             node = newBinary(ND_ADD, node, mul(&tok, tok->next));
             continue;
-            ;
         }
         // "-" mul
         if (equal(tok, "-"))
@@ -290,7 +365,6 @@ static void genExpr(Node *node)
     // 将之前右节点压栈的结果，弹栈到a1
     pop("a1");
 
-
     // 左右节点结果均处理完毕，并且保存在寄存器中：左节点在a0，右节点在a1中。
     // 根据节点类型，运算。
     switch (node->kind)
@@ -307,6 +381,37 @@ static void genExpr(Node *node)
     case ND_DIV:
         printf(" div a0, a0, a1\n");
         return;
+    case ND_EQ:
+        // a0 = a0 ^ a1
+        printf(" xor a0, a0, a1\n");
+        // 如果a0寄存器的值为0, 即a0 == a1, 置a0为1
+        printf(" seqz a0, a0\n");
+        return;
+    case ND_NEQ:
+        printf(" xor a0, a0, a1\n");
+        // 如果a0寄存器的值不为0, 即a0 != a1, 置a0为1
+        printf(" snez a0, a0\n");
+        return;
+    case ND_LT:
+        // set a0 = 1 if a0 < a1
+        printf(" slt a0, a0, a1\n");
+        return;
+    case ND_LET:
+        // a0<=a1 == 1 => !(a0>a1) => a0>a1 != 1 =>
+        printf(" slt a0, a1, a0\n");
+        printf(" xori a0, a0, 1\n");
+        // 如果a0寄存器的值不为0, 即a0 != 1, 置a0为1
+        printf(" snez a0, a0\n");
+        return;
+    case ND_GT:
+        printf(" slt a0, a1, a0\n");
+        return;
+    case ND_GET:
+        // a0>=a1 => (a0<a1) != 1
+        printf(" slt a0, a0, a1\n");
+        printf(" xori a0, a0, 1\n");
+        printf(" snez a0, a0\n");
+        return;
     default:
         error("invalid expression");
         return;
@@ -315,7 +420,22 @@ static void genExpr(Node *node)
 
 static bool isPunct(char p)
 {
-    return p == '+' || p == '-' || p == '*' || p == '/' || p == '(' || p == ')';
+    // 解析二元操作符号
+    return p == '+' || p == '-' || p == '*' || p == '/' || p == '(' || p == ')' || p == '>' || p == '<';
+}
+
+static bool startsWith(char *str, char *subStr)
+{
+    return memcmp(str, subStr, strlen(subStr)) == 0;
+}
+
+static int readPunct(char *p)
+{
+    if (startsWith(p, "==") || startsWith(p, "!=") || startsWith(p, ">=") || startsWith(p, "<="))
+    {
+        return 2;
+    }
+    return isPunct(*p) ? 1 : 0;
 }
 
 static Token *tokenize(char *p)
@@ -325,11 +445,13 @@ static Token *tokenize(char *p)
 
     while (*p)
     {
+        // 跳过空白符
         if (isspace(*p))
         {
             p++;
             continue;
         }
+        // 解析数字
         if (isdigit(*p))
         {
             char *startP = p;
@@ -340,12 +462,14 @@ static Token *tokenize(char *p)
             cur = cur->next;
             continue;
         }
-        if (isPunct(*p))
+        // 解析操作符
+        int punctLen = readPunct(p);
+        if (punctLen)
         {
-            Token *tok = newToken(TOK_PUNCT, p, p + 1);
+            Token *tok = newToken(TOK_PUNCT, p, p + punctLen);
             cur->next = tok;
             cur = cur->next;
-            p++;
+            p += punctLen;
             continue;
         }
         errorAt(p, "invalid token: %c", *p);
@@ -364,6 +488,7 @@ int main(int argc, char *argv[])
 
     currentInput = argv[1];
     // currentInput = "1-8/(2*2)+3*6";
+    // currentInput = "1";
     Token *tok = tokenize(currentInput);
 
     Node *node = expr(&tok, tok);
