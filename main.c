@@ -27,8 +27,6 @@ typedef enum
     ND_NEQ, // 不等
     ND_LT,  // 小于
     ND_LET, // 小于等于
-    ND_GT,  // 大于
-    ND_GET, // 大于等于
 } NodeKind;
 
 typedef struct Node Node;
@@ -206,14 +204,12 @@ static Node *relational(Token **rest, Token *tok)
             node = newBinary(ND_LET, node, add(&tok, tok->next));
             continue;
         }
-        if (equal(tok, ">"))
-        {
-            node = newBinary(ND_GT, node, add(&tok, tok->next));
+        if (equal(tok, ">")) {
+            node = newBinary(ND_LT, add(&tok, tok->next), node);
             continue;
         }
-        if (equal(tok, ">="))
-        {
-            node = newBinary(ND_GET, node, add(&tok, tok->next));
+        if (equal(tok, ">=")) {
+            node = newBinary(ND_LET, add(&tok, tok->next), node);
             continue;
         }
 
@@ -397,20 +393,10 @@ static void genExpr(Node *node)
         printf(" slt a0, a0, a1\n");
         return;
     case ND_LET:
-        // a0<=a1 == 1 => !(a0>a1) => a0>a1 != 1 =>
+        // a0<=a1 == 1 => !(a0>a1) 
         printf(" slt a0, a1, a0\n");
+        // 此时a0的值为1或者0, 对a0取反 相当于 a0^1
         printf(" xori a0, a0, 1\n");
-        // 如果a0寄存器的值不为0, 即a0 != 1, 置a0为1
-        printf(" snez a0, a0\n");
-        return;
-    case ND_GT:
-        printf(" slt a0, a1, a0\n");
-        return;
-    case ND_GET:
-        // a0>=a1 => (a0<a1) != 1
-        printf(" slt a0, a0, a1\n");
-        printf(" xori a0, a0, 1\n");
-        printf(" snez a0, a0\n");
         return;
     default:
         error("invalid expression");
@@ -421,7 +407,8 @@ static void genExpr(Node *node)
 static bool isPunct(char p)
 {
     // 解析二元操作符号
-    return p == '+' || p == '-' || p == '*' || p == '/' || p == '(' || p == ')' || p == '>' || p == '<';
+    return ispunct(p);
+    // return p == '+' || p == '-' || p == '*' || p == '/' || p == '(' || p == ')' || p == '>' || p == '<';
 }
 
 static bool startsWith(char *str, char *subStr)
@@ -488,7 +475,7 @@ int main(int argc, char *argv[])
 
     currentInput = argv[1];
     // currentInput = "1-8/(2*2)+3*6";
-    // currentInput = "1";
+    // currentInput = "1>2";
     Token *tok = tokenize(currentInput);
 
     Node *node = expr(&tok, tok);
