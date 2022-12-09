@@ -1,0 +1,69 @@
+// 公共头文件
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <stdarg.h>
+#include <string.h>
+#include <stdbool.h>
+#include <assert.h>
+
+// 类型声明
+
+// 词法分析-Token类型
+typedef enum
+{
+    TOK_PUNCT, // 操作符号
+    TOK_NUM,
+    TOK_EOF, // 文件终止符
+} TokenKind;
+
+typedef struct Token
+{
+    TokenKind kind;
+    struct Token *next;
+    long val;
+    char *loc; //在当前解析的字符串内的起始位置
+    int len;   // 字符长度
+} Token;
+
+// 语法分析：
+// AST抽象语法树 节点类型
+typedef enum
+{
+    ND_ADD, // +
+    ND_SUB, // -
+    ND_MUL, // *
+    ND_DIV, // /
+    ND_NUM, // 整数
+    ND_NEG, // 取相反数
+    ND_EQ,  // 相等
+    ND_NEQ, // 不等
+    ND_LT,  // 小于
+    ND_LET, // 小于等于
+} NodeKind;
+
+// 抽象语法树-节点结构
+typedef struct Node
+{
+    NodeKind kind;      // 节点类型
+    struct Node *lhs;   // left-hand side
+    struct Node *rhs;   // right-hand side
+    int val;            // 存储ND_NUM的值
+} Node;
+
+// 报错函数
+void error(char *fmt, ...);
+void errorAt(char *loc, char *fmt, ...);
+
+// 数据结构操作-辅助函数
+bool equal(Token *tok, char *str);
+Token *skip(Token *tok, char * str);
+
+// 词法分析 入口函数
+Token *tokenize(char *input);
+
+// 语法分析 入口函数
+Node *parse(Token *tok);
+
+// 代码生成
+void codegen(Node *node);
