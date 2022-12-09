@@ -11,7 +11,7 @@ int main(int argc, char *argv[])
 
     char *currentInput = argv[1];
     // currentInput = "1-8/(2*2)+3*6";
-    // currentInput = "1>2";
+    // char *currentInput = "1;";
 
     // 词法分析
     Token *tok = tokenize(currentInput);

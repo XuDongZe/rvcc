@@ -1,7 +1,7 @@
 #include "rvcc.h"
 
 // 当前输入
-static char *currentInput;
+const char *currentInput;
 
 // 内部报错函数
 void error(char *fmt, ...)
@@ -95,8 +95,11 @@ static int readPunct(char *p)
 }
 
 // 接口函数
-Token *tokenize(char *p)
+Token *tokenize(char *input)
 {
+    currentInput = input;
+    char *p = input;
+
     Token head = {};
     Token *cur = &head;
 

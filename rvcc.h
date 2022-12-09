@@ -40,12 +40,15 @@ typedef enum
     ND_NEQ, // 不等
     ND_LT,  // 小于
     ND_LET, // 小于等于
+
+    ND_EXPR_STMT, // 表达式节点
 } NodeKind;
 
 // 抽象语法树-节点结构
 typedef struct Node
 {
     NodeKind kind;      // 节点类型
+    struct Node *next;  // 下一个
     struct Node *lhs;   // left-hand side
     struct Node *rhs;   // right-hand side
     int val;            // 存储ND_NUM的值

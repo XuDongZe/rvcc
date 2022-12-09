@@ -13,6 +13,9 @@ rvcc: $(OBJS)
 # 将多个*.o文件编译为rvcc
 	$(CC) $(CFLAGS) -o $@ $^
 
+# 所有的.o文件都依赖于rvcc.h
+$(OBJS): rvcc.h
+
 # 测试标签，运行测试脚本
 test: rvcc
 	./test.sh

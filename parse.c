@@ -31,6 +31,9 @@ static Node *newNum(int val)
     return node;
 }
 
+// program = stmt*
+// stmt = exprStmt
+// exprStmt = expr ";"
 // expr = equality
 // equality = relational ("==" relational || "!=" relational)*
 // relational = add ("<" add | "<=" add | ">" add | ">=" add)*
@@ -38,6 +41,9 @@ static Node *newNum(int val)
 // mul = unary ("*" unary | "/" unary)*
 // unary = ("+" | "-") unary | primary
 // primary = "(" expr ")" | num
+static Node *program(Token **rest, Token *tok);
+static Node *stmt(Token **rest, Token *tok);
+static Node *exprStmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static Node *equality(Token **rest, Token *tok);
 static Node *relational(Token **rest, Token *tok);
@@ -45,6 +51,22 @@ static Node *add(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
+
+// program = stmt*
+
+// stmt = exprStmt
+static Node *stmt(Token **rest, Token *tok)
+{
+    return exprStmt(rest, tok);
+}
+
+// exprStmt = expr ";"
+static Node *exprStmt(Token **rest, Token *tok)
+{
+    Node *node = newUnary(ND_EXPR_STMT, expr(&tok, tok));
+    *rest = skip(tok, ";");
+    return node;
+}
 
 // expr = equality
 static Node *expr(Token **rest, Token *tok)
@@ -94,11 +116,13 @@ static Node *relational(Token **rest, Token *tok)
             node = newBinary(ND_LET, node, add(&tok, tok->next));
             continue;
         }
-        if (equal(tok, ">")) {
+        if (equal(tok, ">"))
+        {
             node = newBinary(ND_LT, add(&tok, tok->next), node);
             continue;
         }
-        if (equal(tok, ">=")) {
+        if (equal(tok, ">="))
+        {
             node = newBinary(ND_LET, add(&tok, tok->next), node);
             continue;
         }
@@ -197,11 +221,17 @@ static Node *primary(Token **rest, Token *tok)
     errorAt(tok->loc, "expected an expression");
 }
 
-Node *parse(Token *tok) {
-    Node *node = expr(&tok, tok);
-    if (tok->kind != TOK_EOF)
+Node *parse(Token *tok)
+{
+
+    Node head = {};
+    Node *cur = &head;
+
+    // program = stmt*
+    while (tok->kind != TOK_EOF)
     {
-        errorAt(tok->loc, "extra token: %d", tok->kind);
+        cur->next = stmt(&tok, tok);
+        cur = cur->next;
     }
-    return node;
+    return head.next;
 }

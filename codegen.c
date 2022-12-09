@@ -26,6 +26,18 @@ static void pop(char *reg)
     depth--;
 }
 
+static void genStmt(Node *node);
+static void genExpr(Node *node);
+
+static void genStmt(Node *node) {
+    if (node->kind == ND_EXPR_STMT) {
+        // 左侧节点。与parse一致
+        genExpr(node->lhs);
+        return;
+    }
+    error("invalid statment");
+}
+
 static void genExpr(Node *node)
 {
     switch (node->kind)
@@ -104,10 +116,11 @@ void codegen(Node *node)
     printf("main:\n");
 
     // 代码生成
-    genExpr(node);
-
-    // 如果stack未清空 报错
-    assert(depth == 0);
+    for (Node *n=node; n; n = n->next) {
+        genStmt(n);
+        // 如果stack未清空 报错
+        assert(depth == 0);
+    }
 
     // 将a0返回
     printf(" ret\n");
