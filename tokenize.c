@@ -122,6 +122,14 @@ Token *tokenize(char *input)
             cur = cur->next;
             continue;
         }
+        // 解析标记符
+        if (*p >= 'a' && *p <= 'z')
+        {
+            cur->next = newToken(TOK_IDENT, p, p + 1);
+            cur = cur->next;
+            p++;
+            continue;
+        }
         // 解析操作符
         int punctLen = readPunct(p);
         if (punctLen)

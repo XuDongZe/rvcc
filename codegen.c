@@ -26,11 +26,30 @@ static void pop(char *reg)
     depth--;
 }
 
-static void genStmt(Node *node);
 static void genExpr(Node *node);
+static void genAddr(Node *node);
+static void genStmt(Node *node);
 
-static void genStmt(Node *node) {
-    if (node->kind == ND_EXPR_STMT) {
+// 计算给定节点的绝对地址：变量，函数，指针
+static void genAddr(Node *node)
+{
+    if (node->kind == ND_VAR)
+    {
+        // base值为fp，fp的下一个空间为'a'
+        int offset = (node->name - 'a' + 1) * 8;
+        // fp为栈帧起始地址
+        printf(" addi a0, fp, %d\n", -offset);
+        // 此时a0的值为fp-offset。一个内存地址
+        return;
+    }
+
+    error("not an address");
+}
+
+static void genStmt(Node *node)
+{
+    if (node->kind == ND_EXPR_STMT)
+    {
         // 左侧节点。与parse一致
         genExpr(node->lhs);
         return;
@@ -38,19 +57,42 @@ static void genStmt(Node *node) {
     error("invalid statment");
 }
 
+// 计算node的结果，保存在a0寄存器中
 static void genExpr(Node *node)
 {
     switch (node->kind)
     {
     case ND_NUM:
+        // return: a0=node->val
         printf(" li a0, %d\n", node->val);
         return;
+    case ND_VAR:
+        // return:a0=node->name变量的值
+        // 计算node内变量的内存地址，保存到a0
+        genAddr(node);
+        // 访问a0地址中存储的数据，加载到a0
+        printf(" ld a0, 0(a0)\n");
+        return;
     case ND_NEG:
-        // 子树代码生成
+        // return: a0为node的结果取反
+        // 计算node的子树结果
         genExpr(node->lhs);
         // 此时子树的结果保存在a0中。
         // 最后对结果取反
         printf(" neg a0, a0\n");
+        return;
+    case ND_ASSIGN:
+        // 计算方向：先处理地址
+        // 计算左值的地址，保存到a0。与ND_VAR不同，ND_VAR是将左值保存到a0中。
+        genAddr(node->lhs);
+        // 地址压栈
+        push();
+        // 将右值保存到a0
+        genExpr(node->rhs);
+        // 左值地址弹栈
+        pop("a1");
+        // 此时a1为左值地址，a0为右值。将a0寄存器内存放的值，存储到a1地址指向的内存处。
+        printf(" sd a0, 0(a1)\n");
         return;
     default:
         break;
@@ -115,12 +157,42 @@ void codegen(Node *node)
     printf("  .global main\n");
     printf("main:\n");
 
+    // 栈分配
+    //----------------------// sp
+    //  fp旧值，用于恢复fp
+    //----------------------// fp=sp
+    //  'a'                 // fp-8
+    //  'b'                 // fp-16
+    //  ...                 // fp-(n-'a'+1)*8
+    //  'z'                 // fp-26*8 = fp-208
+    //----------------------// sp = fp-208-8
+    //  表达式生成
+    //----------------------//
+
+    // 问题：为何要用fp保存sp，而不用栈空间保存sp呢？
+
+    // Prologue 前言
+    // 栈内存分配
+    // 将fp的旧值压栈，随后将sp的值保存到fp 后续sp可以变化进行压栈操作了。所以sp->fp两个寄存器，分割出来一部分栈空间。
+    printf(" addi sp, sp, -8\n");
+    printf(" sd fp, 0(sp)\n");
+    printf(" mv fp, sp\n");
+    // 在栈中分配变量表的内存空间
+    printf(" addi sp, sp, -208\n");
+
     // 代码生成
-    for (Node *n=node; n; n = n->next) {
+    for (Node *n = node; n; n = n->next)
+    {
         genStmt(n);
         // 如果stack未清空 报错
         assert(depth == 0);
     }
+
+    // Epilogue 后语
+    // 恢复sp
+    printf(" mv sp, fp\n");
+    // 恢复fp
+    pop("fp");
 
     // 将a0返回
     printf(" ret\n");

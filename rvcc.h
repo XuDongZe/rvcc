@@ -12,9 +12,10 @@
 // 词法分析-Token类型
 typedef enum
 {
+    TOK_IDENT, // 标记符号，变量名/函数名等。
     TOK_PUNCT, // 操作符号
-    TOK_NUM,
-    TOK_EOF, // 文件终止符
+    TOK_NUM,   // 数字
+    TOK_EOF,   // 文件终止符
 } TokenKind;
 
 typedef struct Token
@@ -22,7 +23,7 @@ typedef struct Token
     TokenKind kind;
     struct Token *next;
     long val;
-    char *loc; //在当前解析的字符串内的起始位置
+    char *loc; // 在当前解析的字符串内的起始位置
     int len;   // 字符长度
 } Token;
 
@@ -42,16 +43,19 @@ typedef enum
     ND_LET, // 小于等于
 
     ND_EXPR_STMT, // 表达式节点
+    ND_ASSIGN,    // 赋值
+    ND_VAR,       // 变量
 } NodeKind;
 
 // 抽象语法树-节点结构
 typedef struct Node
 {
-    NodeKind kind;      // 节点类型
-    struct Node *next;  // 下一个
-    struct Node *lhs;   // left-hand side
-    struct Node *rhs;   // right-hand side
-    int val;            // 存储ND_NUM的值
+    NodeKind kind;     // 节点类型
+    struct Node *next; // 下一个
+    struct Node *lhs;  // left-hand side
+    struct Node *rhs;  // right-hand side
+    char name;         // 存储ND_VAR的字符
+    int val;           // 存储ND_NUM的值
 } Node;
 
 // 报错函数
@@ -60,7 +64,7 @@ void errorAt(char *loc, char *fmt, ...);
 
 // 数据结构操作-辅助函数
 bool equal(Token *tok, char *str);
-Token *skip(Token *tok, char * str);
+Token *skip(Token *tok, char *str);
 
 // 词法分析 入口函数
 Token *tokenize(char *input);
