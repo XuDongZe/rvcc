@@ -1,5 +1,8 @@
 #include "rvcc.h"
 
+// 本地变量表
+Obj *locals;
+
 // 抽象语法树Node 数据结构 操作
 
 static Node *newNode(NodeKind kind)
@@ -31,10 +34,53 @@ static Node *newNum(int val)
     return node;
 }
 
-static Node *newVarNode(char name) {
+// 新变量节点
+static Node *newVarNode(Obj *var)
+{
     Node *node = newNode(ND_VAR);
-    node->name = name;
+    node->var = var;
     return node;
+}
+
+// 变量表操作
+
+// 在本地变量表中查找与tok->var匹配的变量
+static Obj *findLVar(Token *tok)
+{
+    for (Obj *var = locals; var; var = var->next)
+    {
+        // 首先判断长度，然后逐字符比较
+        if (strlen(var->name) == tok->len && !strncmp(var->name, tok->loc, tok->len))
+        {
+            return var;
+        }
+    }
+    return NULL;
+}
+
+static Obj *newLVar(Token *tok)
+{
+    Obj *var = calloc(1, sizeof(Obj));
+    // 拷贝标识符：locals中的name和token表中的loc，互不影响。指向两个值相同的字符串。
+    var->name = strndup(tok->loc, tok->len);
+    // offset先不处理：offset按照链表内节点的index分配
+
+    // 放置到链表中：放置到链表头部。所以地址分配是后进先分配的。是一个地址分配的栈。
+    var->next = locals;
+    locals = var;
+    // 返回新建的var
+    return var;
+}
+
+// 新建一个本地变量，并插入本地变量表中
+static Obj *newOrFindLVar(Token *tok)
+{
+    Obj *oldVar = findLVar(tok);
+    if (oldVar)
+    {
+        return oldVar;
+    }
+    return newLVar(tok);
 }
 
 // program = stmt*
@@ -235,8 +281,10 @@ static Node *primary(Token **rest, Token *tok)
         return node;
     }
     // ident
-    if (tok->kind == TOK_IDENT) {
-        Node *node = newVarNode(*tok->loc);
+    if (tok->kind == TOK_IDENT)
+    {
+        Obj *var = newOrFindLVar(tok);
+        Node *node = newVarNode(var);
         *rest = tok->next;
         return node;
     }
@@ -250,17 +298,23 @@ static Node *primary(Token **rest, Token *tok)
     errorAt(tok->loc, "expected an expression");
 }
 
-Node *parse(Token *tok)
+Function *parse(Token *tok)
 {
 
     Node head = {};
     Node *cur = &head;
 
-    // program = stmt*
+    // program = function
     while (tok->kind != TOK_EOF)
     {
         cur->next = stmt(&tok, tok);
         cur = cur->next;
     }
-    return head.next;
+
+    // 封装为Function
+    Function *prog = calloc(1, sizeof(Function));
+    prog->body = head.next;
+    prog->locals = locals;
+    // 此时还未分配stackSize和locals里var的stack地址 => 代码生成时处理
+    return prog;
 }

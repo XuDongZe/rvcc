@@ -85,6 +85,20 @@ static bool startsWith(char *str, char *subStr)
     return memcmp(str, subStr, strlen(subStr)) == 0;
 }
 
+// 判断是否是标记符的首字母规则
+// [a-zA-Z_]
+static bool isIdent1(char p)
+{
+    return (p >= 'a' && p <= 'z') || (p >= 'A' && p <= 'Z') || p == '_';
+}
+
+// 判断是否是标记符的非首字母规则
+// [a-zA-Z0-9_]
+static bool isIdent2(char p)
+{
+    return isIdent1(p) || (p >= '0' && p <= '9');
+}
+
 static int readPunct(char *p)
 {
     if (startsWith(p, "==") || startsWith(p, "!=") || startsWith(p, ">=") || startsWith(p, "<="))
@@ -122,13 +136,19 @@ Token *tokenize(char *input)
             cur = cur->next;
             continue;
         }
-        // 解析标记符
-        if (*p >= 'a' && *p <= 'z')
+        // 解析标记符 isIdent1 (isIdent2)*
+        // 首先命中首字母规则
+        if (isIdent1(*p))
         {
-            cur->next = newToken(TOK_IDENT, p, p + 1);
+            char *startP = p;
+            do
+            {
+                p++;
+            } while (isIdent2(*p));
+            // 处理完毕，此时p指向下一个待处理的字符 
+            cur->next = newToken(TOK_IDENT, startP, p);
             cur = cur->next;
-            p++;
-            continue;
+            continue;;
         }
         // 解析操作符
         int punctLen = readPunct(p);

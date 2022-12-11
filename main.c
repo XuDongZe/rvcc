@@ -11,16 +11,16 @@ int main(int argc, char *argv[])
 
     char *currentInput = argv[1];
     // currentInput = "1-8/(2*2)+3*6";
-    // char *currentInput = "a=3;";
+    // char *currentInput = "foo=3;bar=4;foo+bar;";
 
     // 词法分析
     Token *tok = tokenize(currentInput);
 
     // 语法分析
-    Node *node = parse(tok);
+    Function *prog = parse(tok);
 
     // 代码生成
-    codegen(node);
+    codegen(prog);
     
     return 0;
 }

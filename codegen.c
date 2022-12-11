@@ -26,6 +26,30 @@ static void pop(char *reg)
     depth--;
 }
 
+// 向上对齐到align的整数倍
+static int alignTo(int n, int align) {
+    // 当align=16时：
+    // 0 => 0, 1=>16, 16=>16, 17=>2*16
+    // int base = n / align;
+    // if (n % align != 0) {
+    //     base ++;
+    // }
+    // return base * align;
+    return ((n + align - 1) / align) * align; 
+}
+
+static void assignLVarOffset(Function *prog) {
+    int offset = 0;
+    for (Obj *var=prog->locals; var; var = var->next) {
+        // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
+        offset += 8;
+        // 栈向下增长。地址变小。offset是负数。
+        var->offset = -offset;
+    }
+    // 栈大小 调整为16字节对齐
+    prog->stackSize = alignTo(offset, 16);
+}
+
 static void genExpr(Node *node);
 static void genAddr(Node *node);
 static void genStmt(Node *node);
@@ -35,11 +59,9 @@ static void genAddr(Node *node)
 {
     if (node->kind == ND_VAR)
     {
-        // base值为fp，fp的下一个空间为'a'
-        int offset = (node->name - 'a' + 1) * 8;
         // fp为栈帧起始地址
-        printf(" addi a0, fp, %d\n", -offset);
-        // 此时a0的值为fp-offset。一个内存地址
+        printf(" addi a0, fp, %d\n", node->var->offset);
+        // 此时a0的值为fp+offset。var的内存地址
         return;
     }
 
@@ -151,7 +173,7 @@ static void genExpr(Node *node)
     }
 }
 
-void codegen(Node *node)
+void codegen(Function *prog)
 {
     // 声明一个全局main段，同时也是程序入口段
     printf("  .global main\n");
@@ -160,28 +182,30 @@ void codegen(Node *node)
     // 栈分配
     //----------------------// sp
     //  fp旧值，用于恢复fp
-    //----------------------// fp=sp
-    //  'a'                 // fp-8
-    //  'b'                 // fp-16
-    //  ...                 // fp-(n-'a'+1)*8
-    //  'z'                 // fp-26*8 = fp-208
-    //----------------------// sp = fp-208-8
+    //---------------------- //fp=sp
+    //  本地变量表            // fp-8
+    //----------------------// sp = fp-stackSize-8
     //  表达式生成
     //----------------------//
 
-    // 问题：为何要用fp保存sp，而不用栈空间保存sp呢？
 
     // Prologue 前言
+
     // 栈内存分配
     // 将fp的旧值压栈，随后将sp的值保存到fp 后续sp可以变化进行压栈操作了。所以sp->fp两个寄存器，分割出来一部分栈空间。
+    // 问题：为何要用fp保存sp，而不用栈空间保存sp呢：因为栈空间只能访问栈顶，而fp寄存器可以随时访问。
+    // 后续计算栈内本地变量地址的时候，需要直接使用寄存器作为base值。所以选择fp来保存栈基址。
+    // fp: 程序栈帧基址(frame pointer)，sp: 栈顶指针
     printf(" addi sp, sp, -8\n");
     printf(" sd fp, 0(sp)\n");
     printf(" mv fp, sp\n");
-    // 在栈中分配变量表的内存空间
-    printf(" addi sp, sp, -208\n");
+    // 在栈中分配变量表的内存空间: 映射变量和栈地址
+    assignLVarOffset(prog);
+    // 调整栈顶指针
+    printf(" addi sp, sp, -%d\n", prog->stackSize);
 
     // 代码生成
-    for (Node *n = node; n; n = n->next)
+    for (Node *n = prog->body; n; n = n->next)
     {
         genStmt(n);
         // 如果stack未清空 报错

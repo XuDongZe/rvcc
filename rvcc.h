@@ -1,3 +1,7 @@
+// 使用POSIX.1标准
+// 使用了strndup函数
+#define _POSIX_C_SOURCE 200809L
+
 // 公共头文件
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +32,28 @@ typedef struct Token
 } Token;
 
 // 语法分析：
+
 // AST抽象语法树 节点类型
+typedef struct Node Node;
+
+// 本地变量表 节点类型
+typedef struct Obj Obj;
+struct Obj
+{
+    Obj *next;  // 指向下一个节点的链接
+    char *name; // 变量的标识符
+    int offset; // 本地变量的栈偏移，基地址存放在fp。实际地址为：fp+offset
+};
+
+// 函数表 节点类型
+typedef struct Function Function;
+struct Function
+{
+    Node *body;    // 函数体
+    Obj *locals;   // 本地变量表
+    int stackSize; // 进入函数时，动态计算的栈大小
+};
+
 typedef enum
 {
     ND_ADD, // +
@@ -48,15 +73,15 @@ typedef enum
 } NodeKind;
 
 // 抽象语法树-节点结构
-typedef struct Node
+struct Node
 {
-    NodeKind kind;     // 节点类型
-    struct Node *next; // 下一个
-    struct Node *lhs;  // left-hand side
-    struct Node *rhs;  // right-hand side
-    char name;         // 存储ND_VAR的字符
-    int val;           // 存储ND_NUM的值
-} Node;
+    NodeKind kind;      // 节点类型
+    struct Node *next;  // 下一个
+    struct Node *lhs;   // left-hand side
+    struct Node *rhs;   // right-hand side
+    Obj *var;           // 存储ND_VAR的变量
+    int val;            // 存储ND_NUM的常量值
+};
 
 // 报错函数
 void error(char *fmt, ...);
@@ -70,7 +95,7 @@ Token *skip(Token *tok, char *str);
 Token *tokenize(char *input);
 
 // 语法分析 入口函数
-Node *parse(Token *tok);
+Function *parse(Token *tok);
 
 // 代码生成
-void codegen(Node *node);
+void codegen(Function *node);
