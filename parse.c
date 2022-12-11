@@ -95,7 +95,7 @@ static Obj *newOrFindLVar(Token *tok)
 // compoundStmt = "{" stmt* "}"
 // stmt = returnStmt | compoundStmt | exprStmt
 // returnStmt = "return" exprStmt
-// exprStmt = expr ";"
+// exprStmt = expr? ";"
 // expr = assign
 // assign = equality ("=" assign)?
 // equality = relational ("==" relational || "!=" relational)*
@@ -161,9 +161,18 @@ static Node *returnStmt(Token **rest, Token *tok)
     return node;
 }
 
-// exprStmt = expr ";"
+// exprStmt = ; | expr ";"
 static Node *exprStmt(Token **rest, Token *tok)
 {
+    // ";"
+    if (equal(tok, ";")) {
+        // 将";"当作"{}"处理。
+        Node *node = newNode(ND_BLOCK);
+        *rest = tok->next;
+        return node;
+    }
+
+    // expr ";"
     Node *node = newUnary(ND_EXPR_STMT, expr(&tok, tok));
     *rest = skip(tok, ";");
     return node;
