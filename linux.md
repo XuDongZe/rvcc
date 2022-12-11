@@ -16,3 +16,18 @@ chmod u+x calc.sh
 2. $#表示传递的参数个数
 3. 参数下标是从$1开始的。
 4. $0表示执行的脚本名称。
+
+## ubuntu中文简体变繁体
+解决：ctrl + shift + f
+使用上面三个组合键，按一次切换成简体，再按一次成繁体...
+
+## ubuntu将文本复制到剪切板
+1. 安装xsel
+```sh
+sudo apt-get install xsel
+```
+2. 拷贝
+```sh
+cat test.sh | xsel -b
+```
+此时test.sh内容已经被复制到剪切板，可以使用ctrl+v复制了。

@@ -16,10 +16,11 @@
 // 词法分析-Token类型
 typedef enum
 {
-    TOK_IDENT, // 标记符号，变量名/函数名等。
-    TOK_PUNCT, // 操作符号
-    TOK_NUM,   // 数字
-    TOK_EOF,   // 文件终止符
+    TOK_IDENT,      // 标记符号，变量名/函数名等。
+    TOK_PUNCT,      // 操作符号
+    TOK_KEKWORD,    // 关键字
+    TOK_NUM,        // 数字
+    TOK_EOF,        // 文件终止符
 } TokenKind;
 
 typedef struct Token
@@ -60,16 +61,16 @@ typedef enum
     ND_SUB, // -
     ND_MUL, // *
     ND_DIV, // /
-    ND_NUM, // 整数
     ND_NEG, // 取相反数
     ND_EQ,  // 相等
     ND_NEQ, // 不等
     ND_LT,  // 小于
     ND_LET, // 小于等于
-
-    ND_EXPR_STMT, // 表达式节点
-    ND_ASSIGN,    // 赋值
-    ND_VAR,       // 变量
+    ND_ASSIGN,      // 赋值
+    ND_RETURN,    // 返回
+    ND_EXPR_STMT,   // 表达式语句
+    ND_VAR,         // 变量
+    ND_NUM,         // 数字
 } NodeKind;
 
 // 抽象语法树-节点结构

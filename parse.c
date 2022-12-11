@@ -84,7 +84,8 @@ static Obj *newOrFindLVar(Token *tok)
 }
 
 // program = stmt*
-// stmt = exprStmt
+// stmt = returnStmt | exprStmt
+// returnStmt = "return" exprStmt
 // exprStmt = expr ";"
 // expr = assign
 // assign = equality ("=" assign)?
@@ -96,6 +97,7 @@ static Obj *newOrFindLVar(Token *tok)
 // primary = "(" expr ")" | ident | num
 static Node *program(Token **rest, Token *tok);
 static Node *stmt(Token **rest, Token *tok);
+static Node *returnStmt(Token **rest, Token *tok);
 static Node *exprStmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
@@ -108,10 +110,22 @@ static Node *primary(Token **rest, Token *tok);
 
 // program = stmt*
 
-// stmt = exprStmt
+// stmt = returnStmt | exprStmt
 static Node *stmt(Token **rest, Token *tok)
 {
+    if (equal(tok, "return")) {
+        return returnStmt(rest, tok);
+    }
     return exprStmt(rest, tok);
+}
+
+// returnStmt = "return" exprStmt
+static Node *returnStmt(Token **rest, Token *tok)
+{
+    tok = skip(tok, "return");
+    Node *node = newUnary(ND_RETURN, exprStmt(&tok, tok));
+    *rest = tok;
+    return node;
 }
 
 // exprStmt = expr ";"

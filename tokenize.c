@@ -108,6 +108,17 @@ static int readPunct(char *p)
     return isPunct(*p) ? 1 : 0;
 }
 
+// 将tok中的keyword部分找出来
+static void convertKeyWord(Token *tok) {
+    for (Token *p = tok; p; p = p->next) {
+        if (p->kind == TOK_IDENT) {
+            if (equal(p, "return")) {
+                p->kind = TOK_KEKWORD;
+            }
+        }
+    }
+}
+
 // 接口函数
 Token *tokenize(char *input)
 {
@@ -162,6 +173,9 @@ Token *tokenize(char *input)
         }
         errorAt(p, "invalid token: %c", *p);
     }
+    // 关键字识别
+    convertKeyWord(head.next);
+    // 哨兵节点
     cur->next = newToken(TOK_EOF, p, p);
     return head.next;
 }

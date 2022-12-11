@@ -27,7 +27,8 @@ static void pop(char *reg)
 }
 
 // 向上对齐到align的整数倍
-static int alignTo(int n, int align) {
+static int alignTo(int n, int align)
+{
     // 当align=16时：
     // 0 => 0, 1=>16, 16=>16, 17=>2*16
     // int base = n / align;
@@ -35,12 +36,14 @@ static int alignTo(int n, int align) {
     //     base ++;
     // }
     // return base * align;
-    return ((n + align - 1) / align) * align; 
+    return ((n + align - 1) / align) * align;
 }
 
-static void assignLVarOffset(Function *prog) {
+static void assignLVarOffset(Function *prog)
+{
     int offset = 0;
-    for (Obj *var=prog->locals; var; var = var->next) {
+    for (Obj *var = prog->locals; var; var = var->next)
+    {
         // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
         offset += 8;
         // 栈向下增长。地址变小。offset是负数。
@@ -70,11 +73,20 @@ static void genAddr(Node *node)
 
 static void genStmt(Node *node)
 {
-    if (node->kind == ND_EXPR_STMT)
+    switch (node->kind)
     {
+    case ND_EXPR_STMT:
         // 左侧节点。与parse一致
         genExpr(node->lhs);
         return;
+    case ND_RETURN:
+        // 先计算子表达式值
+        genStmt(node->lhs);
+        // 程序返回: 跳转到标签处
+        printf(" j .L.return\n");
+        return;
+    default:
+        break;
     }
     error("invalid statment");
 }
@@ -188,7 +200,6 @@ void codegen(Function *prog)
     //  表达式生成
     //----------------------//
 
-
     // Prologue 前言
 
     // 栈内存分配
@@ -211,6 +222,9 @@ void codegen(Function *prog)
         // 如果stack未清空 报错
         assert(depth == 0);
     }
+
+    // return标签
+    printf(".L.return:\n");
 
     // Epilogue 后语
     // 恢复sp

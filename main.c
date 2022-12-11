@@ -10,8 +10,7 @@ int main(int argc, char *argv[])
     }
 
     char *currentInput = argv[1];
-    // currentInput = "1-8/(2*2)+3*6";
-    // char *currentInput = "foo=3;bar=4;foo+bar;";
+    // char *currentInput = "return 0;";
 
     // 词法分析
     Token *tok = tokenize(currentInput);
