@@ -68,6 +68,7 @@ typedef enum
     ND_LET, // 小于等于
     ND_ASSIGN,      // 赋值
     ND_RETURN,    // 返回
+    ND_BLOCK,       // 代码块
     ND_EXPR_STMT,   // 表达式语句
     ND_VAR,         // 变量
     ND_NUM,         // 数字
@@ -80,6 +81,9 @@ struct Node
     struct Node *next;  // 下一个
     struct Node *lhs;   // left-hand side
     struct Node *rhs;   // right-hand side
+
+    Node *body;         // 代码块
+
     Obj *var;           // 存储ND_VAR的变量
     int val;            // 存储ND_NUM的常量值
 };

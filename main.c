@@ -12,6 +12,8 @@ int main(int argc, char *argv[])
     char *currentInput = argv[1];
     // char *currentInput = "return 0;";
 
+    printf("# %s\n", currentInput);
+
     // 词法分析
     Token *tok = tokenize(currentInput);
 

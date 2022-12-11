@@ -85,6 +85,13 @@ static void genStmt(Node *node)
         // 程序返回: 跳转到标签处
         printf(" j .L.return\n");
         return;
+    case ND_BLOCK:
+        // 依次计算body指向的stmt列表
+        // body 可能是空列表: {} => do nothing
+        for (Node *p = node->body; p; p = p->next) {
+            genStmt(p);
+        }
+        return;
     default:
         break;
     }

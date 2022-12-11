@@ -83,8 +83,17 @@ static Obj *newOrFindLVar(Token *tok)
     return newLVar(tok);
 }
 
-// program = stmt*
-// stmt = returnStmt | exprStmt
+// return: 生成一个AST树节点。
+// rest: 在callee内部修改当前tok的指向。
+// 在caller调用newASTNode函数前后，都要保持tok的栈值，是当前要处理的token的地址。
+// 也就是tok在newASTNode调用前，调用时，调用后，都得保持tok是当前待处理的token数据的指针。
+//
+// static Node *newASTNode(Token **rest, Token *tok);
+
+// program = compoundStmt
+
+// compoundStmt = "{" stmt* "}"
+// stmt = returnStmt | compoundStmt | exprStmt
 // returnStmt = "return" exprStmt
 // exprStmt = expr ";"
 // expr = assign
@@ -96,6 +105,7 @@ static Obj *newOrFindLVar(Token *tok)
 // unary = ("+" | "-") unary | primary
 // primary = "(" expr ")" | ident | num
 static Node *program(Token **rest, Token *tok);
+static Node *compoundStmt(Token **rest, Token *tok);
 static Node *stmt(Token **rest, Token *tok);
 static Node *returnStmt(Token **rest, Token *tok);
 static Node *exprStmt(Token **rest, Token *tok);
@@ -108,13 +118,36 @@ static Node *mul(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
-// program = stmt*
+// program = compoundStmt
+
+// compoundStmt = "{" (stmt)* "}"
+static Node *compoundStmt(Token **rest, Token *tok) {
+    // "{"
+    tok = skip(tok, "{");
+    // stmt*
+    Node head = {};
+    Node *cur = &head;
+    while (!equal(tok, "}")) {
+        cur->next = stmt(&tok, tok);
+        cur = cur->next;
+    }
+    Node *node = newNode(ND_BLOCK);
+    // maybe NULL
+    node->body = head.next;
+    // "}"
+    tok = skip(tok, "}");
+    *rest = tok;
+    return node;
+}
 
 // stmt = returnStmt | exprStmt
 static Node *stmt(Token **rest, Token *tok)
 {
     if (equal(tok, "return")) {
         return returnStmt(rest, tok);
+    }
+    if (equal(tok, "{")) {
+        return compoundStmt(rest, tok);
     }
     return exprStmt(rest, tok);
 }
@@ -314,20 +347,11 @@ static Node *primary(Token **rest, Token *tok)
 
 Function *parse(Token *tok)
 {
-
-    Node head = {};
-    Node *cur = &head;
-
-    // program = function
-    while (tok->kind != TOK_EOF)
-    {
-        cur->next = stmt(&tok, tok);
-        cur = cur->next;
-    }
+    Node *body = compoundStmt(&tok, tok);
 
     // 封装为Function
     Function *prog = calloc(1, sizeof(Function));
-    prog->body = head.next;
+    prog->body = body;
     prog->locals = locals;
     // 此时还未分配stackSize和locals里var的stack地址 => 代码生成时处理
     return prog;
