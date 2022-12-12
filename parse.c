@@ -92,11 +92,12 @@ static Obj *newOrFindLVar(Token *tok)
 
 // program = stmt*
 
-// stmt = returnStmt | compoundStmt | ifStmt | forStmt | exprStmt
+// stmt = returnStmt | compoundStmt | ifStmt | forStmt | whileStmt | exprStmt
 // returnStmt = "return" exprStmt
 // compoundStmt = "{" stmt* "}"
 // ifStmt = "if" "(" expr ")" stmt ("else" stmt)?
 // forStmt = "for" "(" (expr:init)? ";" (expr:cond)? ";" (expr:inc)? ")" stmt
+// whileStmt = "while" "(" expr ")" stmt
 // exprStmt = expr? ";"
 // expr = assign
 // assign = equality ("=" assign)?
@@ -112,6 +113,7 @@ static Node *returnStmt(Token **rest, Token *tok);
 static Node *compoundStmt(Token **rest, Token *tok);
 static Node *ifStmt(Token **rest, Token *tok);
 static Node *forStmt(Token **rest, Token *tok);
+static Node *whileStmt(Token **rest, Token *tok);
 static Node *exprStmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
@@ -142,6 +144,9 @@ static Node *stmt(Token **rest, Token *tok)
     if (equal(tok, "for"))
     {
         return forStmt(rest, tok);
+    }
+    if (equal(tok, "while")) {
+        return whileStmt(rest, tok);
     }
     return exprStmt(rest, tok);
 }
@@ -245,6 +250,27 @@ static Node *forStmt(Token **rest, Token *tok)
     node->init = init;
     node->cond = cond;
     node->inc = inc;
+    node->then = then;
+
+    *rest = tok;
+    return node;
+}
+
+// whileStmt = "while" "(" expr ")" stmt
+static Node *whileStmt(Token **rest, Token *tok) {
+    // "while"
+    tok = skip(tok, "while");
+    // "("
+    tok = skip(tok, "(");
+    // expr
+    Node *cond = expr(&tok, tok);
+    // ")"
+    tok = skip(tok, ")");
+    // stmt
+    Node *then = stmt(&tok, tok);
+    // 构造While节点。我们用FOR来表示：for是增强版本的while
+    Node *node = newNode(ND_FOR);
+    node->cond = cond;
     node->then = then;
 
     *rest = tok;

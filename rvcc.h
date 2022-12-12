@@ -86,7 +86,7 @@ struct Node
 
     Node *body;         // 代码块
 
-    // if
+    // if / for / while
     Node *cond;         // 条件表达式
     Node *then;         // then语句
     Node *els;          // else语句

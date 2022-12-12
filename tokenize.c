@@ -109,7 +109,7 @@ static int readPunct(char *p)
 }
 
 // 关键字表。指针数组，每一个元素是char*
-static char *kws[] = {"return", "if", "else", "for"};
+static char *kws[] = {"return", "if", "else", "for", "while"};
 static int KW_LEN = sizeof(kws) / sizeof(kws[0]);
 // 判断tok是否是一个关键字
 static bool isKw(Token *tok)
