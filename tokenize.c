@@ -108,13 +108,38 @@ static int readPunct(char *p)
     return isPunct(*p) ? 1 : 0;
 }
 
+// 关键字表。指针数组，每一个元素是char*
+static char *kws[] = {"return", "if", "else"};
+static int KW_LEN = sizeof(kws) / sizeof(kws[0]);
+// 判断tok是否是一个关键字
+static bool isKw(Token *tok)
+{
+    if (tok->kind == TOK_KEKWORD)
+    {
+        return true;
+    }
+    if (tok->kind != TOK_IDENT)
+    {
+        return false;
+    }
+    for (int i = 0; i < KW_LEN; i++)
+    {
+        if (equal(tok, kws[i]))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 // 将tok中的keyword部分找出来
-static void convertKeyWord(Token *tok) {
-    for (Token *p = tok; p; p = p->next) {
-        if (p->kind == TOK_IDENT) {
-            if (equal(p, "return")) {
-                p->kind = TOK_KEKWORD;
-            }
+static void convertKeyWord(Token *tok)
+{
+    for (Token *p = tok; p; p = p->next)
+    {
+        if (isKw(p))
+        {
+            p->kind = TOK_KEKWORD;
         }
     }
 }
@@ -156,10 +181,11 @@ Token *tokenize(char *input)
             {
                 p++;
             } while (isIdent2(*p));
-            // 处理完毕，此时p指向下一个待处理的字符 
+            // 处理完毕，此时p指向下一个待处理的字符
             cur->next = newToken(TOK_IDENT, startP, p);
             cur = cur->next;
-            continue;;
+            continue;
+            ;
         }
         // 解析操作符
         int punctLen = readPunct(p);

@@ -90,11 +90,12 @@ static Obj *newOrFindLVar(Token *tok)
 //
 // static Node *newASTNode(Token **rest, Token *tok);
 
-// program = compoundStmt
+// program = stmt*
 
-// compoundStmt = "{" stmt* "}"
-// stmt = returnStmt | compoundStmt | exprStmt
+// stmt = returnStmt | compoundStmt | ifStmt | exprStmt
 // returnStmt = "return" exprStmt
+// compoundStmt = "{" stmt* "}"
+// ifStmt = "if" "(" expr ")" stmt ("else" stmt)?
 // exprStmt = expr? ";"
 // expr = assign
 // assign = equality ("=" assign)?
@@ -105,9 +106,10 @@ static Obj *newOrFindLVar(Token *tok)
 // unary = ("+" | "-") unary | primary
 // primary = "(" expr ")" | ident | num
 static Node *program(Token **rest, Token *tok);
-static Node *compoundStmt(Token **rest, Token *tok);
 static Node *stmt(Token **rest, Token *tok);
 static Node *returnStmt(Token **rest, Token *tok);
+static Node *compoundStmt(Token **rest, Token *tok);
+static Node *ifStmt(Token **rest, Token *tok);
 static Node *exprStmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
@@ -118,7 +120,31 @@ static Node *mul(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
-// program = compoundStmt
+// program = stmt*
+
+// stmt = returnStmt | compoundStmt | ifStmt | exprStmt
+static Node *stmt(Token **rest, Token *tok)
+{
+    if (equal(tok, "return")) {
+        return returnStmt(rest, tok);
+    }
+    if (equal(tok, "{")) {
+        return compoundStmt(rest, tok);
+    }
+    if (equal(tok, "if")) {
+        return ifStmt(rest, tok);
+    }
+    return exprStmt(rest, tok);
+}
+
+// returnStmt = "return" exprStmt
+static Node *returnStmt(Token **rest, Token *tok)
+{
+    tok = skip(tok, "return");
+    Node *node = newUnary(ND_RETURN, exprStmt(&tok, tok));
+    *rest = tok;
+    return node;
+}
 
 // compoundStmt = "{" (stmt)* "}"
 static Node *compoundStmt(Token **rest, Token *tok) {
@@ -140,23 +166,31 @@ static Node *compoundStmt(Token **rest, Token *tok) {
     return node;
 }
 
-// stmt = returnStmt | exprStmt
-static Node *stmt(Token **rest, Token *tok)
-{
-    if (equal(tok, "return")) {
-        return returnStmt(rest, tok);
+// ifStmt = "if" "(" expr ")" stmt ("else" stmt)?
+static Node *ifStmt(Token **rest, Token *tok) {
+    // "if"
+    tok = skip(tok, "if");
+    // "("
+    tok = skip(tok, "(");
+    // cond expr
+    Node *cond = expr(&tok, tok);
+    // ")"
+    tok = skip(tok, ")");
+    // then stmt
+    Node *then = stmt(&tok, tok);
+    // else stmt
+    Node *els = NULL;
+    // 可选的else
+    if (equal(tok, "else")) {
+        tok = skip(tok, "else");
+        els = stmt(&tok, tok);
     }
-    if (equal(tok, "{")) {
-        return compoundStmt(rest, tok);
-    }
-    return exprStmt(rest, tok);
-}
-
-// returnStmt = "return" exprStmt
-static Node *returnStmt(Token **rest, Token *tok)
-{
-    tok = skip(tok, "return");
-    Node *node = newUnary(ND_RETURN, exprStmt(&tok, tok));
+    // 构造if节点
+    Node *node = newNode(ND_IF);
+    node->cond = cond;
+    node->then = then;
+    node->els = els;
+    // 返回
     *rest = tok;
     return node;
 }
@@ -356,7 +390,7 @@ static Node *primary(Token **rest, Token *tok)
 
 Function *parse(Token *tok)
 {
-    Node *body = compoundStmt(&tok, tok);
+    Node *body = stmt(&tok, tok);
 
     // 封装为Function
     Function *prog = calloc(1, sizeof(Function));

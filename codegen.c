@@ -53,8 +53,14 @@ static void assignLVarOffset(Function *prog)
     prog->stackSize = alignTo(offset, 16);
 }
 
-static void genExpr(Node *node);
+static int count()
+{
+    static int i = 1;
+    return i++;
+}
+
 static void genAddr(Node *node);
+static void genExpr(Node *node);
 static void genStmt(Node *node);
 
 // 计算给定节点的绝对地址：变量，函数，指针
@@ -69,33 +75,6 @@ static void genAddr(Node *node)
     }
 
     error("not an address");
-}
-
-static void genStmt(Node *node)
-{
-    switch (node->kind)
-    {
-    case ND_EXPR_STMT:
-        // 左侧节点。与parse一致
-        genExpr(node->lhs);
-        return;
-    case ND_RETURN:
-        // 先计算子表达式值
-        genStmt(node->lhs);
-        // 程序返回: 跳转到标签处
-        printf(" j .L.return\n");
-        return;
-    case ND_BLOCK:
-        // 依次计算body指向的stmt列表
-        // body 可能是空列表: "{}" || ";" => do nothing
-        for (Node *p = node->body; p; p = p->next) {
-            genStmt(p);
-        }
-        return;
-    default:
-        break;
-    }
-    error("invalid statment");
 }
 
 // 计算node的结果，保存在a0寄存器中
@@ -190,6 +169,57 @@ static void genExpr(Node *node)
         error("invalid expression");
         return;
     }
+}
+
+static void genStmt(Node *node)
+{
+    switch (node->kind)
+    {
+    case ND_EXPR_STMT:
+        // 左侧节点。与parse一致
+        genExpr(node->lhs);
+        return;
+    case ND_RETURN:
+        // 先计算子表达式值
+        genStmt(node->lhs);
+        // 程序返回: 跳转到标签处
+        printf(" j .L.return\n");
+        return;
+    case ND_BLOCK:
+        // 依次计算body指向的stmt列表
+        // body 可能是空列表: "{}" || ";" => do nothing
+        for (Node *p = node->body; p; p = p->next)
+        {
+            genStmt(p);
+        }
+        return;
+    case ND_IF:
+    {
+        // 分配if语句的id
+        int c = count();
+        // 计算cond expr
+        genExpr(node->cond);
+        // 此时cond结果保存在a0寄存器。判定a0,如果满足条件继续执行，不满足条件，跳转到else入口标签。
+        printf(" beqz a0, .L.if.else.%d\n", c);
+        // 满足条件，继续执行then stmt
+        genStmt(node->then);
+        // then执行完毕，无条件跳转到if出口标签
+        printf(" j .L.if.out.%d\n", c);
+        // 不满足条件，else入口标签
+        printf(".L.if.else.%d:\n", c);
+        // 执行else stmt。else部分是可选的
+        if (node->els)
+        {
+            genStmt(node->els);
+        }
+        // 生成if出口标签
+        printf(".L.if.out.%d:\n", c);
+        return;
+    }
+    default:
+        break;
+    }
+    error("invalid statment");
 }
 
 void codegen(Function *prog)
