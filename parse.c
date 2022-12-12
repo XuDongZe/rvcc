@@ -92,10 +92,11 @@ static Obj *newOrFindLVar(Token *tok)
 
 // program = stmt*
 
-// stmt = returnStmt | compoundStmt | ifStmt | exprStmt
+// stmt = returnStmt | compoundStmt | ifStmt | forStmt | exprStmt
 // returnStmt = "return" exprStmt
 // compoundStmt = "{" stmt* "}"
 // ifStmt = "if" "(" expr ")" stmt ("else" stmt)?
+// forStmt = "for" "(" (expr:init)? ";" (expr:cond)? ";" (expr:inc)? ")" stmt
 // exprStmt = expr? ";"
 // expr = assign
 // assign = equality ("=" assign)?
@@ -110,6 +111,7 @@ static Node *stmt(Token **rest, Token *tok);
 static Node *returnStmt(Token **rest, Token *tok);
 static Node *compoundStmt(Token **rest, Token *tok);
 static Node *ifStmt(Token **rest, Token *tok);
+static Node *forStmt(Token **rest, Token *tok);
 static Node *exprStmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
@@ -125,14 +127,21 @@ static Node *primary(Token **rest, Token *tok);
 // stmt = returnStmt | compoundStmt | ifStmt | exprStmt
 static Node *stmt(Token **rest, Token *tok)
 {
-    if (equal(tok, "return")) {
+    if (equal(tok, "return"))
+    {
         return returnStmt(rest, tok);
     }
-    if (equal(tok, "{")) {
+    if (equal(tok, "{"))
+    {
         return compoundStmt(rest, tok);
     }
-    if (equal(tok, "if")) {
+    if (equal(tok, "if"))
+    {
         return ifStmt(rest, tok);
+    }
+    if (equal(tok, "for"))
+    {
+        return forStmt(rest, tok);
     }
     return exprStmt(rest, tok);
 }
@@ -147,13 +156,15 @@ static Node *returnStmt(Token **rest, Token *tok)
 }
 
 // compoundStmt = "{" (stmt)* "}"
-static Node *compoundStmt(Token **rest, Token *tok) {
+static Node *compoundStmt(Token **rest, Token *tok)
+{
     // "{"
     tok = skip(tok, "{");
     // stmt*
     Node head = {};
     Node *cur = &head;
-    while (!equal(tok, "}")) {
+    while (!equal(tok, "}"))
+    {
         cur->next = stmt(&tok, tok);
         cur = cur->next;
     }
@@ -167,7 +178,8 @@ static Node *compoundStmt(Token **rest, Token *tok) {
 }
 
 // ifStmt = "if" "(" expr ")" stmt ("else" stmt)?
-static Node *ifStmt(Token **rest, Token *tok) {
+static Node *ifStmt(Token **rest, Token *tok)
+{
     // "if"
     tok = skip(tok, "if");
     // "("
@@ -181,7 +193,8 @@ static Node *ifStmt(Token **rest, Token *tok) {
     // else stmt
     Node *els = NULL;
     // 可选的else
-    if (equal(tok, "else")) {
+    if (equal(tok, "else"))
+    {
         tok = skip(tok, "else");
         els = stmt(&tok, tok);
     }
@@ -195,11 +208,55 @@ static Node *ifStmt(Token **rest, Token *tok) {
     return node;
 }
 
+// forStmt = "for" "(" (expr:init)? ";" (expr:cond)? ";" (expr:inc)? ")" stmt
+static Node *forStmt(Token **rest, Token *tok)
+{
+    // "for"
+    tok = skip(tok, "for");
+    // "("
+    tok = skip(tok, "(");
+    // 可选的init expr
+    Node *init = NULL;
+    if (!equal(tok, ";"))
+    {
+        init = expr(&tok, tok);
+    }
+    tok = skip(tok, ";");
+    // 可选的cond expr
+    Node *cond = NULL;
+    if (!equal(tok, ";"))
+    {
+        cond = expr(&tok, tok);
+    }
+    tok = skip(tok, ";");
+    // 可选的incr expr
+    Node *inc = NULL;
+    if (!equal(tok, ")"))
+    {
+        inc = expr(&tok, tok);
+    }
+    // ")"
+    tok = skip(tok, ")");
+    // 条件成立的 循环体
+    Node *then = stmt(&tok, tok);
+
+    // 构建for节点
+    Node *node = newNode(ND_FOR);
+    node->init = init;
+    node->cond = cond;
+    node->inc = inc;
+    node->then = then;
+
+    *rest = tok;
+    return node;
+}
+
 // exprStmt = ; | expr ";"
 static Node *exprStmt(Token **rest, Token *tok)
 {
     // ";"
-    if (equal(tok, ";")) {
+    if (equal(tok, ";"))
+    {
         // 将";"当作"{}"处理。
         Node *node = newNode(ND_BLOCK);
         *rest = tok->next;

@@ -200,20 +200,54 @@ static void genStmt(Node *node)
         // 计算cond expr
         genExpr(node->cond);
         // 此时cond结果保存在a0寄存器。判定a0,如果满足条件继续执行，不满足条件，跳转到else入口标签。
-        printf(" beqz a0, .L.if.else.%d\n", c);
+        printf(" beqz a0, .L.else.%d\n", c);
         // 满足条件，继续执行then stmt
         genStmt(node->then);
         // then执行完毕，无条件跳转到if出口标签
-        printf(" j .L.if.out.%d\n", c);
+        printf(" j .L.end.%d\n", c);
         // 不满足条件，else入口标签
-        printf(".L.if.else.%d:\n", c);
+        printf(".L.else.%d:\n", c);
         // 执行else stmt。else部分是可选的
         if (node->els)
         {
             genStmt(node->els);
         }
         // 生成if出口标签
-        printf(".L.if.out.%d:\n", c);
+        printf(".L.end.%d:\n", c);
+        return;
+    }
+    case ND_FOR:
+    {
+        int c = count();
+        // init expr，init语句的返回丢弃，不使用。可选
+        if (node->init)
+        {
+            genExpr(node->init);
+        }
+        // for循环入口标签。
+        printf(".L.begin.%d:\n", c);
+        // cond expr. 可选。没有条件，默认true
+        if (node->cond)
+        {
+            genExpr(node->cond);
+        }
+        else
+        {
+            printf(" li a0, 1\n");
+        }
+        // 判断条件，如果为0则跳转到for结束标签
+        printf(" beqz a0, .L.end.%d\n", c);
+        // 执行循环体
+        genStmt(node->then);
+        // incr expr 可选。
+        if (node->inc)
+        {
+            genExpr(node->inc);
+        }
+        // 跳转到for开始标签
+        printf(" j .L.begin.%d\n", c);
+        // for结束标签
+        printf(".L.end.%d:\n", c);
         return;
     }
     default:
