@@ -80,6 +80,8 @@ typedef enum
 struct Node
 {
     NodeKind kind;      // 节点类型
+    Token *tok;         // 节点对应的终结符
+    
     struct Node *next;  // 下一个
     struct Node *lhs;   // left-hand side
     struct Node *rhs;   // right-hand side
@@ -100,6 +102,7 @@ struct Node
 // 报错函数
 void error(char *fmt, ...);
 void errorAt(char *loc, char *fmt, ...);
+void errorTok(Token *tok, char *fmt, ...);
 
 // 数据结构操作-辅助函数
 bool equal(Token *tok, char *str);

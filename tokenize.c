@@ -14,23 +14,38 @@ void error(char *fmt, ...)
     exit(1);
 }
 
-void errorAt(char *loc, char *fmt, ...)
+// 输出错误出现的位置，并退出
+static void verrorAt(char *loc, char *fmt, va_list va)
 {
-    va_list va;
-    va_start(va, fmt);
-
     int pos = loc - currentInput;
+    // 输出源信息
+    fprintf(stderr, "%s\n", currentInput);
+    // 输出^位置标记
     if (pos > 0)
     {
-        fprintf(stderr, "%s\n", currentInput);
-        fprintf(stderr, "%*s", pos, " ");
-        fprintf(stderr, "^ ");
+        // 将""补齐为pos位，在左侧填充pos个空格
+        fprintf(stderr, "%*s", pos, "");
     }
+    fprintf(stderr, "^ ");
     vfprintf(stderr, fmt, va);
     fprintf(stderr, "\n");
 
     va_end(va);
     exit(1);
+}
+
+void errorAt(char *loc, char *fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    verrorAt(loc, fmt, va);
+}
+
+void errorTok(Token *tok, char *fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    verrorAt(tok->loc, fmt, va);
 }
 
 // Token操作
@@ -52,7 +67,7 @@ static long getNumber(Token *tok)
 {
     if (tok->kind != TOK_NUM)
     {
-        errorAt(tok->loc, "expect a number");
+        errorTok(tok, "expect a number");
     }
     return tok->val;
 }
@@ -66,7 +81,7 @@ Token *skip(Token *tok, char *str)
 {
     if (!equal(tok, str))
     {
-        errorAt(tok->loc, str);
+        errorTok(tok, "expected: '%s'", str);
     }
     return tok->next;
 }

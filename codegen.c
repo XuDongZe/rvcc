@@ -74,7 +74,7 @@ static void genAddr(Node *node)
         return;
     }
 
-    error("not an address");
+    errorTok(node->tok, "not a lvalue");
 }
 
 // 计算node的结果，保存在a0寄存器中
@@ -100,7 +100,7 @@ static void genExpr(Node *node)
         // 计算node的子树结果
         genExpr(node->lhs);
         // 此时子树的结果保存在a0中。
-        printf(" 对a0取相反数\n");
+        printf(" #对a0取相反数\n");
         printf(" neg a0, a0\n");
         return;
     case ND_ASSIGN:
@@ -169,7 +169,7 @@ static void genExpr(Node *node)
         printf(" xori a0, a0, 1\n");
         return;
     default:
-        error("invalid expression");
+        errorTok(node->tok, "invalid expression");
         return;
     }
 }
@@ -256,12 +256,12 @@ static void genStmt(Node *node)
     default:
         break;
     }
-    error("invalid statment");
+    errorTok(node->tok, "invalid statment");
 }
 
 void codegen(Function *prog)
 {
-    printf("# 声明全局main段: 程序入口段\n\n");
+    printf("# 声明全局main段: 程序入口段\n");
     printf(" .global main\n");
     printf("main:\n");
 
