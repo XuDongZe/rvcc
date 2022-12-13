@@ -8,10 +8,8 @@ static int depth;
 // 不使用寄存器，因为需要存储的值的数量是变化的
 static void push(void)
 {
-    // 调整sp
+    printf(" # a0压栈\n");
     printf(" addi sp, sp, -8\n");
-    // 将a0压入栈
-    // save double, from a0, to sp[0]
     printf(" sd a0, 0(sp)\n");
     // 记录当前栈深度
     depth++;
@@ -21,6 +19,7 @@ static void push(void)
 static void pop(char *reg)
 {
     // load double,
+    printf(" # 出栈到%s\n", reg);
     printf(" ld %s, 0(sp)\n", reg);
     printf(" addi sp, sp, 8\n");
     depth--;
@@ -69,6 +68,7 @@ static void genAddr(Node *node)
     if (node->kind == ND_VAR)
     {
         // fp为栈帧起始地址
+        printf(" # 将变量的栈帧偏移地址加载到a0\n");
         printf(" addi a0, fp, %d\n", node->var->offset);
         // 此时a0的值为fp+offset。var的内存地址
         return;
@@ -84,6 +84,7 @@ static void genExpr(Node *node)
     {
     case ND_NUM:
         // return: a0=node->val
+        printf(" # 加载%d到a0\n", node->val);
         printf(" li a0, %d\n", node->val);
         return;
     case ND_VAR:
@@ -91,6 +92,7 @@ static void genExpr(Node *node)
         // 计算node内变量的内存地址，保存到a0
         genAddr(node);
         // 访问a0地址中存储的数据，加载到a0
+        printf(" #访问a0地址指向的内存数据，加载到a0\n");
         printf(" ld a0, 0(a0)\n");
         return;
     case ND_NEG:
@@ -98,7 +100,7 @@ static void genExpr(Node *node)
         // 计算node的子树结果
         genExpr(node->lhs);
         // 此时子树的结果保存在a0中。
-        // 最后对结果取反
+        printf(" 对a0取相反数\n");
         printf(" neg a0, a0\n");
         return;
     case ND_ASSIGN:
@@ -112,6 +114,7 @@ static void genExpr(Node *node)
         // 左值地址弹栈
         pop("a1");
         // 此时a1为左值地址，a0为右值。将a0寄存器内存放的值，存储到a1地址指向的内存处。
+        printf(" # 访问a1内地址指向的内存数据, 加载到a0\n");
         printf(" sd a0, 0(a1)\n");
         return;
     default:
@@ -258,8 +261,8 @@ static void genStmt(Node *node)
 
 void codegen(Function *prog)
 {
-    // 声明一个全局main段，同时也是程序入口段
-    printf("  .global main\n");
+    printf("# 声明全局main段: 程序入口段\n\n");
+    printf(" .global main\n");
     printf("main:\n");
 
     // 栈分配
@@ -273,20 +276,26 @@ void codegen(Function *prog)
 
     // Prologue 前言
 
+    printf("# ========栈帧内存分配==========\n");
     // 栈内存分配
     // 将fp的旧值压栈，随后将sp的值保存到fp 后续sp可以变化进行压栈操作了。所以sp->fp两个寄存器，分割出来一部分栈空间。
     // 问题：为何要用fp保存sp，而不用栈空间保存sp呢：因为栈空间只能访问栈顶，而fp寄存器可以随时访问。
     // 后续计算栈内本地变量地址的时候，需要直接使用寄存器作为base值。所以选择fp来保存栈基址。
     // fp: 程序栈帧基址(frame pointer)，sp: 栈顶指针
+    printf("# ========上下文保护: 寄存器==========\n");
+    printf("# 保存fp: 到栈帧中\n");
     printf(" addi sp, sp, -8\n");
     printf(" sd fp, 0(sp)\n");
+    printf("# 保存sp: 加载到fp\n");
     printf(" mv fp, sp\n");
+    
+    printf("# ========栈帧分配: 本地变量表==========\n");
     // 在栈中分配变量表的内存空间: 映射变量和栈地址
     assignLVarOffset(prog);
     // 调整栈顶指针
     printf(" addi sp, sp, -%d\n", prog->stackSize);
 
-    // 代码生成
+    printf("# ========代码生成==========\n");
     for (Node *n = prog->body; n; n = n->next)
     {
         genStmt(n);
@@ -294,15 +303,16 @@ void codegen(Function *prog)
         assert(depth == 0);
     }
 
-    // return标签
+    printf(" # return标签\n");
     printf(".L.return:\n");
 
     // Epilogue 后语
-    // 恢复sp
+    printf("# ========上下文恢复: 寄存器==========\n");
+    printf(" # 恢复sp, 从fp中\n");
     printf(" mv sp, fp\n");
-    // 恢复fp
+    printf(" # 恢复fp, 从栈中\n");
     pop("fp");
 
-    // 将a0返回
+    printf("# ========将a0值返回给系统调用==========\n");
     printf(" ret\n");
 }
