@@ -65,13 +65,21 @@ static void genStmt(Node *node);
 // 计算给定节点的绝对地址：变量，函数，指针
 static void genAddr(Node *node)
 {
-    if (node->kind == ND_VAR)
+    switch (node->kind)
     {
+    case ND_VAR:
         // fp为栈帧起始地址
         printf(" # 将变量的栈帧偏移地址加载到a0\n");
         printf(" addi a0, fp, %d\n", node->var->offset);
         // 此时a0的值为fp+offset。var的内存地址
         return;
+        break;
+    case ND_DEREF:
+        // 解引用
+        genExpr(node->lhs);
+        return;
+    default:
+        break;
     }
 
     errorTok(node->tok, "not a lvalue");
@@ -102,6 +110,17 @@ static void genExpr(Node *node)
         // 此时子树的结果保存在a0中。
         printf(" #对a0取相反数\n");
         printf(" neg a0, a0\n");
+        return;
+    case ND_ADDR:
+        // 将node子节点是一个变量 将其内存地址保存到a0
+        genAddr(node->lhs);
+        return;
+    case ND_DEREF:
+        // 解除引用: node->lhs是一个变量的地址，将地址计算，保存到a0。
+        genExpr(node->lhs);
+        // 此时a0中保存着一个变量，将变量对应的值加载到a0。
+        // y = &x; *y; *y时：计算y值时，得到x的地址。返回*addr, 再次load得到x的值。
+        printf(" ld a0, 0(a0)\n");
         return;
     case ND_ASSIGN:
         // 计算方向：先处理地址
@@ -261,6 +280,7 @@ static void genStmt(Node *node)
 
 void codegen(Function *prog)
 {
+    // 声明全局main段: 程序入口段
     printf("# 声明全局main段: 程序入口段\n");
     printf(" .global main\n");
     printf("main:\n");
@@ -283,12 +303,14 @@ void codegen(Function *prog)
     // 后续计算栈内本地变量地址的时候，需要直接使用寄存器作为base值。所以选择fp来保存栈基址。
     // fp: 程序栈帧基址(frame pointer)，sp: 栈顶指针
     printf("# ========上下文保护: 寄存器==========\n");
+    // 保存fp
     printf("# 保存fp: 到栈帧中\n");
     printf(" addi sp, sp, -8\n");
     printf(" sd fp, 0(sp)\n");
+    // 保存sp
     printf("# 保存sp: 加载到fp\n");
     printf(" mv fp, sp\n");
-    
+
     printf("# ========栈帧分配: 本地变量表==========\n");
     // 在栈中分配变量表的内存空间: 映射变量和栈地址
     assignLVarOffset(prog);
@@ -308,8 +330,10 @@ void codegen(Function *prog)
 
     // Epilogue 后语
     printf("# ========上下文恢复: 寄存器==========\n");
+    // 恢复sp
     printf(" # 恢复sp, 从fp中\n");
     printf(" mv sp, fp\n");
+    // 恢复fp
     printf(" # 恢复fp, 从栈中\n");
     pop("fp");
 

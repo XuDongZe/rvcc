@@ -73,6 +73,8 @@ typedef enum
     ND_IF,          // if语句
     ND_FOR,         // for语句
     ND_VAR,         // 变量
+    ND_DEREF,       // 解除引用 *
+    ND_ADDR,        // 取地址 &
     ND_NUM,         // 数字
 } NodeKind;
 

@@ -112,7 +112,7 @@ static Obj *newOrFindLVar(Token *tok)
 // relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 // add = mul ("*" mul | "/" mul)
 // mul = unary ("*" unary | "/" unary)*
-// unary = ("+" | "-") unary | primary
+// unary = ("+" | "-" | "&" | "*") unary | primary
 // primary = "(" expr ")" | ident | num
 static Node *program(Token **rest, Token *tok);
 static Node *stmt(Token **rest, Token *tok);
@@ -407,7 +407,7 @@ static Node *relational(Token **rest, Token *tok)
 // add = mul ("+" mul | "-" mul)*
 static Node *add(Token **rest, Token *tok)
 {
-        Token *startTok = tok;
+    Token *startTok = tok;
 
     // mul
     Node *node = mul(&tok, tok);
@@ -434,7 +434,7 @@ static Node *add(Token **rest, Token *tok)
 // mul = unary ("*" unary | "/" unary)*
 static Node *mul(Token **rest, Token *tok)
 {
-        Token *startTok = tok;
+    Token *startTok = tok;
 
     // unary
     Node *node = unary(&tok, tok);
@@ -458,11 +458,11 @@ static Node *mul(Token **rest, Token *tok)
     }
 }
 
-// unary = ("+" | "-") unary | primary
+// unary = ("+" | "-" | "*" | "&") unary | primary
 // 解析一元运算
 static Node *unary(Token **rest, Token *tok)
 {
-            Token *startTok = tok;
+    Token *startTok = tok;
 
     // "+" unary
     if (equal(tok, "+"))
@@ -474,6 +474,14 @@ static Node *unary(Token **rest, Token *tok)
     {
         return newUnary(ND_NEG, unary(rest, tok->next), startTok);
     }
+    // "&" unary
+    if (equal(tok, "&")) {
+        return newUnary(ND_ADDR, unary(rest, tok->next), startTok);
+    }
+    // "*" unary
+    if (equal(tok, "*")) {
+        return newUnary(ND_DEREF, unary(rest, tok->next), startTok);
+    }
     // primary
     return primary(rest, tok);
 }
@@ -481,7 +489,7 @@ static Node *unary(Token **rest, Token *tok)
 // primary = "(" expr ")" | ident | num
 static Node *primary(Token **rest, Token *tok)
 {
-        Token *startTok = tok;
+    Token *startTok = tok;
 
     // "(" expr ")"
     if (equal(tok, "("))
@@ -505,7 +513,7 @@ static Node *primary(Token **rest, Token *tok)
         *rest = tok->next;
         return node;
     }
-    errorTok(tok, "expected an expression");
+    errorTok(tok, "expected identifier or num");
 }
 
 Function *parse(Token *tok)
