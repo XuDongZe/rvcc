@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     }
 
     char *currentInput = argv[1];
-    // char *currentInput = "{ x=3; y=&x; *y=5; return x; }";
+    // char *currentInput = "{ return 12-34+56; }";
 
     printf("# %s\n\n", currentInput);
 

@@ -34,7 +34,9 @@ typedef struct Token
 
 // 语法分析：
 
-// AST抽象语法树 节点类型
+// 类型系统 数据类型
+typedef struct Type Type;
+// AST抽象语法树 节点
 typedef struct Node Node;
 
 // 本地变量表 节点类型
@@ -81,10 +83,12 @@ typedef enum
 // 抽象语法树-节点结构
 struct Node
 {
+    struct Node *next;  // 下一个
+    
     NodeKind kind;      // 节点类型
     Token *tok;         // 节点对应的终结符
-    
-    struct Node *next;  // 下一个
+    Type *type;         // 节点对应的数据类型  
+
     struct Node *lhs;   // left-hand side
     struct Node *rhs;   // right-hand side
 
@@ -109,6 +113,25 @@ void errorTok(Token *tok, char *fmt, ...);
 // 数据结构操作-辅助函数
 bool equal(Token *tok, char *str);
 Token *skip(Token *tok, char *str);
+
+// 类型系统
+// 类型枚举
+typedef enum {
+    TY_INT,    // 整数
+    TY_PTR,     // 指针
+} TypeKind;
+
+struct Type {
+    TypeKind kind;  // 类型枚举
+    Type *base;     // 指向的类型
+};
+
+// 全局变量
+extern Type *tyInt;
+// 判断类型是否是整型
+bool isInteger(Type *type);
+// 为node节点及其所有字节点 递归的添加类型。
+void addType(Node *node);
 
 // 词法分析 入口函数
 Token *tokenize(char *input);

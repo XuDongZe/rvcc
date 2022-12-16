@@ -404,6 +404,73 @@ static Node *relational(Token **rest, Token *tok)
     }
 }
 
+// 支持类型转换的加法
+static Node *typeAdd(Node *lhs, Node *rhs, Token *tok)
+{
+    // 为左右节点 添加类型
+    addType(lhs);
+    addType(rhs);
+
+    // num + num
+    if (isInteger(lhs->type) && isInteger(rhs->type))
+    {
+        return newBinary(ND_ADD, lhs, rhs, tok);
+    }
+    // num + ptr => ptr + num
+    // 1+p => p+1
+    if (!lhs->type->base && rhs->type->base)
+    {
+        // 交换lhs和rhs
+        // 注意这里没有影响外面的参数
+        Node *t = lhs;
+        lhs = rhs;
+        rhs = t;
+    }
+
+    // p+1 => p+1*8
+    if (lhs->type->base && !rhs->type->base)
+    {
+        Node *r = newBinary(ND_MUL, rhs, newNum(8, tok), tok);
+        return newBinary(ND_ADD, lhs, r, tok);
+    }
+
+    errorTok(tok, "invalid operand");
+}
+
+// 支持类型转换的减法
+static Node *typeSub(Node *lhs, Node *rhs, Token *tok)
+{
+    // 为左右节点 添加类型
+    addType(lhs);
+    addType(rhs);
+
+    // num - num
+    if (isInteger(lhs->type) && isInteger(rhs->type))
+    {
+        return newBinary(ND_SUB, lhs, rhs, tok);
+    }
+
+    // ptr - ptr
+    if (lhs->type->base && rhs->type->base)
+    {
+        Node *diff = newBinary(ND_SUB, lhs, rhs, tok);
+        // 类型隐式转换为int
+        diff->type = TY_INT;
+        // 返回两个指针之间有多少元素
+        return newBinary(ND_DIV, diff, newNum(8, tok), tok);
+    }
+
+    // ptr - num
+    // p-1 => p-1*8
+    if (lhs->type->base && !rhs->type->base)
+    {
+        Node *diff = newBinary(ND_MUL, rhs, newNum(8, tok), tok);
+        return newBinary(ND_SUB, lhs, diff, tok);
+    }
+
+    errorTok(tok, "invalid operand");
+}
+
 // add = mul ("+" mul | "-" mul)*
 static Node *add(Token **rest, Token *tok)
 {
@@ -416,13 +483,13 @@ static Node *add(Token **rest, Token *tok)
         // "+" mul
         if (equal(tok, "+"))
         {
-            node = newBinary(ND_ADD, node, mul(&tok, tok->next), startTok);
+            node = typeAdd(node, mul(&tok, tok->next), startTok);
             continue;
         }
         // "-" mul
         if (equal(tok, "-"))
         {
-            node = newBinary(ND_SUB, node, mul(&tok, tok->next), startTok);
+            node = typeSub(node, mul(&tok, tok->next), startTok);
             continue;
         }
 
@@ -475,11 +542,13 @@ static Node *unary(Token **rest, Token *tok)
         return newUnary(ND_NEG, unary(rest, tok->next), startTok);
     }
     // "&" unary
-    if (equal(tok, "&")) {
+    if (equal(tok, "&"))
+    {
         return newUnary(ND_ADDR, unary(rest, tok->next), startTok);
     }
     // "*" unary
-    if (equal(tok, "*")) {
+    if (equal(tok, "*"))
+    {
         return newUnary(ND_DEREF, unary(rest, tok->next), startTok);
     }
     // primary
