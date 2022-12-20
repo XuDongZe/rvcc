@@ -52,6 +52,7 @@ void addType(Node *node)
     case ND_NEQ:
     case ND_LT:
     case ND_LET:
+    case ND_FUNCALL:
         node->type = tyInt;
         return;
     case ND_VAR:

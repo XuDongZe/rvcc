@@ -19,7 +19,7 @@ static void push(void)
 static void pop(char *reg)
 {
     // load double,
-    printf(" # 出栈到%s\n", reg);
+    // printf(" # 出栈到%s\n", reg);
     printf(" ld %s, 0(sp)\n", reg);
     printf(" addi sp, sp, 8\n");
     depth--;
@@ -102,6 +102,10 @@ static void genExpr(Node *node)
         // 访问a0地址中存储的数据，加载到a0
         printf(" #访问a0地址指向的内存数据，加载到a0\n");
         printf(" ld a0, 0(a0)\n");
+        return;
+    case ND_FUNCALL:
+        printf("\n # 调用函数%s\n", node->funcName);
+        printf(" call %s\n", node->funcName);
         return;
     case ND_NEG:
         // return: a0为node的结果取反
@@ -287,10 +291,12 @@ void codegen(Function *prog)
 
     // 栈分配
     //----------------------// sp
+    // ra                   
+    //----------------------// ra = sp - 8
     //  fp旧值，用于恢复fp
-    //---------------------- //fp=sp
-    //  本地变量表            // fp-8
-    //----------------------// sp = fp-stackSize-8
+    //---------------------- //fp = sp - 16
+    //  本地变量表            
+    //----------------------// sp = sp - 16 - stackSize
     //  表达式生成
     //----------------------//
 
@@ -303,9 +309,12 @@ void codegen(Function *prog)
     // 后续计算栈内本地变量地址的时候，需要直接使用寄存器作为base值。所以选择fp来保存栈基址。
     // fp: 程序栈帧基址(frame pointer)，sp: 栈顶指针
     printf("# ========上下文保护: 寄存器==========\n");
+    // 保存ra
+    printf("# 保存ra\n");
+    printf(" addi sp, sp, -16\n");
+    printf(" sd ra, 8(sp)\n");
     // 保存fp
     printf("# 保存fp: 到栈帧中\n");
-    printf(" addi sp, sp, -8\n");
     printf(" sd fp, 0(sp)\n");
     // 保存sp
     printf("# 保存sp: 加载到fp\n");
@@ -336,6 +345,9 @@ void codegen(Function *prog)
     // 恢复fp
     printf(" # 恢复fp, 从栈中\n");
     pop("fp");
+    // 恢复ra
+    printf(" #恢复ra\n");
+    pop("ra");
 
     printf("# ========将a0值返回给系统调用==========\n");
     printf(" ret\n");

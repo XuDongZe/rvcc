@@ -641,7 +641,8 @@ static Node *unary(Token **rest, Token *tok)
     return primary(rest, tok);
 }
 
-// primary = "(" expr ")" | ident | num
+// primary = "(" expr ")" | ident args? | num
+// args = "(" ")"
 static Node *primary(Token **rest, Token *tok)
 {
     Token *startTok = tok;
@@ -656,6 +657,15 @@ static Node *primary(Token **rest, Token *tok)
     // ident
     if (tok->kind == TOK_IDENT)
     {
+        // function
+        if (equal(tok->next, "(")) {
+            Node *nd = newNode(ND_FUNCALL, tok);
+            nd->funcName = strndup(tok->loc, tok->len);
+            *rest = skip(tok->next->next, ")");
+            return nd;
+        }
+
+        // var
         Obj *var = findLVar(tok);
         if (!var)
         {

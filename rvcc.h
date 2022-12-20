@@ -76,6 +76,7 @@ typedef enum
     ND_IF,          // if语句
     ND_FOR,         // for语句
     ND_VAR,         // 变量
+    ND_FUNCALL,     // 函数
     ND_DEREF,       // 解除引用 *
     ND_ADDR,        // 取地址 &
     ND_NUM,         // 数字
@@ -101,6 +102,9 @@ struct Node
     Node *els;          // else语句
     Node *init;         // for init表达式
     Node *inc;          // for incr表达式
+
+    // func
+    char *funcName;     // 函数名
 
     Obj *var;           // 存储ND_VAR的变量
     int val;            // 存储ND_NUM的常量值
