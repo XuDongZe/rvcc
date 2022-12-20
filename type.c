@@ -44,9 +44,9 @@ void addType(Node *node)
     // 递归到叶子节点，处理
     switch (node->kind)
     {
+    // 将节点类型设置为左节点的类型。
     // 基础字面量
     case ND_NUM:
-    case ND_VAR:
     // 关系运算
     case ND_EQ:
     case ND_NEQ:
@@ -54,8 +54,10 @@ void addType(Node *node)
     case ND_LET:
         node->type = tyInt;
         return;
-
-    // 将节点类型设置为左节点的类型。
+    case ND_VAR:
+        // 节点的类型就是节点内变量的声明类型。是在变量声明时构造的。
+        node->type = node->var->ty;
+        return;
     // 取相反数
     case ND_NEG:
     // 算数运算

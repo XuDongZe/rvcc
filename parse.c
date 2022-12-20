@@ -65,11 +65,13 @@ static Obj *findLVar(Token *tok)
     return NULL;
 }
 
-static Obj *newLVar(Token *tok)
+// 在变量表中新增一个变量
+static Obj *newLVar(char *name, Type *ty)
 {
     Obj *var = calloc(1, sizeof(Obj));
     // 拷贝标识符：locals中的name和token表中的loc，互不影响。指向两个值相同的字符串。
-    var->name = strndup(tok->loc, tok->len);
+    var->name = name;
+    var->ty = ty;
     // offset先不处理：offset按照链表内节点的index分配
 
     // 放置到链表中：放置到链表头部。所以地址分配是后进先分配的。是一个地址分配的栈。
@@ -79,15 +81,14 @@ static Obj *newLVar(Token *tok)
     return var;
 }
 
-// 新建一个本地变量，并插入本地变量表中
-static Obj *newOrFindLVar(Token *tok)
+// 获取tok中的标识符副本
+static char *getIdent(Token *tok)
 {
-    Obj *oldVar = findLVar(tok);
-    if (oldVar)
+    if (tok->kind != TOK_IDENT)
     {
-        return oldVar;
+        errorTok(tok, "expected an identifier");
     }
-    return newLVar(tok);
+    return strndup(tok->loc, tok->len);
 }
 
 // return: 生成一个AST树节点。
@@ -100,8 +101,11 @@ static Obj *newOrFindLVar(Token *tok)
 // program = stmt*
 
 // stmt = returnStmt | compoundStmt | ifStmt | forStmt | whileStmt | exprStmt
+// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
+// declspec = "int"
+// declarator = "*"* ident
 // returnStmt = "return" exprStmt
-// compoundStmt = "{" stmt* "}"
+// compoundStmt = "{" (declaration | stmt)* "}"
 // ifStmt = "if" "(" expr ")" stmt ("else" stmt)?
 // forStmt = "for" "(" (expr:init)? ";" (expr:cond)? ";" (expr:inc)? ")" stmt
 // whileStmt = "while" "(" expr ")" stmt
@@ -116,6 +120,7 @@ static Obj *newOrFindLVar(Token *tok)
 // primary = "(" expr ")" | ident | num
 static Node *program(Token **rest, Token *tok);
 static Node *stmt(Token **rest, Token *tok);
+static Node *declaration(Token **rest, Token *tok);
 static Node *returnStmt(Token **rest, Token *tok);
 static Node *compoundStmt(Token **rest, Token *tok);
 static Node *ifStmt(Token **rest, Token *tok);
@@ -159,6 +164,80 @@ static Node *stmt(Token **rest, Token *tok)
     return exprStmt(rest, tok);
 }
 
+// declspec = "int"
+// decarator specifier
+static Type *declspec(Token **rest, Token *tok)
+{
+    *rest = skip(tok, "int");
+    return tyInt;
+}
+
+// declarator = "*"* ident
+static Type *declarator(Token **rest, Token *tok, Type *ty)
+{
+    // "*"*
+    while (consume(&tok, tok, "*"))
+    {
+        ty = newPointer(ty);
+    }
+
+    if (tok->kind != TOK_IDENT)
+    {
+        errorTok(tok, "expected a variable name");
+    }
+
+    // ident
+    ty->tok = tok;
+    *rest = tok->next;
+    return ty;
+}
+
+// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
+// int x=1, *z=&x, y=*z=2;
+static Node *declaration(Token **rest, Token *tok)
+{
+    Type *base = declspec(&tok, tok);
+
+    Node head = {};
+    Node *cur = &head;
+    int i = 0;
+
+    while (!equal(tok, ";"))
+    {
+        if (i++ > 0)
+        {
+            tok = skip(tok, ",");
+        }
+
+        // declarator
+        Type *ty = declarator(&tok, tok, base);
+        Obj *var = newLVar(getIdent(ty->tok), ty);
+
+        // 如果不是赋值语句，则为声明语句，变量已经放置到变量表中了。
+        if (!equal(tok, "="))
+        {
+            continue;
+        }
+
+        // 封装为表达式语句
+        Node *lhs = newVarNode(var, ty->tok);
+        // 递归赋值语句
+        Node *rhs = assign(&tok, tok->next);
+        Node *node = newBinary(ND_ASSIGN, lhs, rhs, tok);
+        // 表达式
+        cur->next = newUnary(ND_EXPR_STMT, node, tok);
+        cur = cur->next;
+    }
+
+    // 封装为block节点
+    Node *node = newNode(ND_BLOCK, tok);
+    node->body = head.next;
+    // 调整全局token指针
+    tok = skip(tok, ";");
+    *rest = tok;
+    return node;
+}
+
 // returnStmt = "return" exprStmt
 static Node *returnStmt(Token **rest, Token *tok)
 {
@@ -171,20 +250,27 @@ static Node *returnStmt(Token **rest, Token *tok)
     return node;
 }
 
-// compoundStmt = "{" (stmt)* "}"
+// compoundStmt = "{" (declaration | stmt)* "}"
 static Node *compoundStmt(Token **rest, Token *tok)
 {
     Token *startTok = tok;
 
     // "{"
     tok = skip(tok, "{");
-    // stmt*
+    // (declaration | stmt)*
     Node head = {};
     Node *cur = &head;
     while (!equal(tok, "}"))
     {
-        cur->next = stmt(&tok, tok);
+        // declaration
+        if (equal(tok, "int"))
+            cur->next = declaration(&tok, tok);
+        // stmt
+        else
+            cur->next = stmt(&tok, tok);
         cur = cur->next;
+        // 为ast添加类型信息
+        addType(cur);
     }
     Node *node = newNode(ND_BLOCK, startTok);
     // maybe NULL
@@ -570,7 +656,11 @@ static Node *primary(Token **rest, Token *tok)
     // ident
     if (tok->kind == TOK_IDENT)
     {
-        Obj *var = newOrFindLVar(tok);
+        Obj *var = findLVar(tok);
+        if (!var)
+        {
+            errorTok(tok, "undefined variable");
+        }
         Node *node = newVarNode(var, startTok);
         *rest = tok->next;
         return node;

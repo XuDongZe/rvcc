@@ -45,6 +45,7 @@ struct Obj
 {
     Obj *next;  // 指向下一个节点的链接
     char *name; // 变量的标识符
+    Type *ty;   // 变量的类型
     int offset; // 本地变量的栈偏移，基地址存放在fp。实际地址为：fp+offset
 };
 
@@ -113,6 +114,7 @@ void errorTok(Token *tok, char *fmt, ...);
 // 数据结构操作-辅助函数
 bool equal(Token *tok, char *str);
 Token *skip(Token *tok, char *str);
+bool consume(Token **rest, Token *tok, char *str);
 
 // 类型系统
 // 类型枚举
@@ -124,6 +126,7 @@ typedef enum {
 struct Type {
     TypeKind kind;  // 类型枚举
     Type *base;     // 指向的类型
+    Token *tok;     // 指向的token
 };
 
 // 全局变量
@@ -132,6 +135,8 @@ extern Type *tyInt;
 bool isInteger(Type *type);
 // 为node节点及其所有字节点 递归的添加类型。
 void addType(Node *node);
+// 新建指针类型
+Type *newPointer(Type *base);
 
 // 词法分析 入口函数
 Token *tokenize(char *input);

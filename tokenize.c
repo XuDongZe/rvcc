@@ -72,11 +72,13 @@ static long getNumber(Token *tok)
     return tok->val;
 }
 
+// 匹配token与指定的字符串 true表示匹配成功
 bool equal(Token *tok, char *str)
 {
     return memcmp(tok->loc, str, tok->len) == 0 && str[tok->len] == '\0';
 }
 
+// 跳过指定的字符串，不匹配则报错
 Token *skip(Token *tok, char *str)
 {
     if (!equal(tok, str))
@@ -84,6 +86,18 @@ Token *skip(Token *tok, char *str)
         errorTok(tok, "expected: '%s'", str);
     }
     return tok->next;
+}
+
+// 消耗指定的字符串 true表示成功匹配并消耗 false匹配失败
+bool consume(Token **rest, Token *tok, char *str)
+{
+    if (equal(tok, str))
+    {
+        *rest = tok->next;
+        return true;
+    }
+    *rest = tok;
+    return false;
 }
 
 // 字符判定
@@ -124,7 +138,7 @@ static int readPunct(char *p)
 }
 
 // 关键字表。指针数组，每一个元素是char*
-static char *kws[] = {"return", "if", "else", "for", "while"};
+static char *kws[] = {"return", "if", "else", "for", "while", "int"};
 static int KW_LEN = sizeof(kws) / sizeof(kws[0]);
 // 判断tok是否是一个关键字
 static bool isKw(Token *tok)
