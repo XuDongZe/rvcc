@@ -105,6 +105,7 @@ struct Node
 
     // func
     char *funcName;     // 函数名
+    Node *args;         // 函数参数
 
     Obj *var;           // 存储ND_VAR的变量
     int val;            // 存储ND_NUM的常量值

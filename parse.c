@@ -641,6 +641,33 @@ static Node *unary(Token **rest, Token *tok)
     return primary(rest, tok);
 }
 
+// funcCall = ident "(" assign ("," assign)? ")"
+static Node *funcCall(Token **rest, Token *tok)
+{
+    // tok is ident now
+    Token *startTok = tok;
+    tok = tok->next->next;
+
+    // args
+    Node head = {};
+    Node *cur = &head;
+    while (!equal(tok, ")"))
+    {
+        if (cur != &head)
+        {
+            tok = skip(tok, ",");
+        }
+        cur->next = assign(&tok, tok);
+        cur = cur->next;
+    }
+    *rest = skip(tok, ")");
+
+    Node *nd = newNode(ND_FUNCALL, tok);
+    nd->funcName = getIdent(startTok);
+    nd->args = head.next;
+    return nd;
+}
+
 // primary = "(" expr ")" | ident args? | num
 // args = "(" ")"
 static Node *primary(Token **rest, Token *tok)
@@ -658,10 +685,10 @@ static Node *primary(Token **rest, Token *tok)
     if (tok->kind == TOK_IDENT)
     {
         // function
-        if (equal(tok->next, "(")) {
-            Node *nd = newNode(ND_FUNCALL, tok);
-            nd->funcName = strndup(tok->loc, tok->len);
-            *rest = skip(tok->next->next, ")");
+        if (equal(tok->next, "("))
+        {
+            Node *nd = funcCall(&tok, tok);
+            *rest = tok;
             return nd;
         }
 

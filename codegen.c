@@ -2,6 +2,8 @@
 
 // 栈深度记录
 static int depth;
+// 寄存器表
+static char *argRegs[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6"};
 
 // 压栈，结果临时压入栈中保存
 // sp为栈顶指针 stack pointer，栈反向向下增长。64位下，一个单位8个字节。
@@ -104,6 +106,24 @@ static void genExpr(Node *node)
         printf(" ld a0, 0(a0)\n");
         return;
     case ND_FUNCALL:
+        // funcall前言，准备参数堆栈。
+        // a0-参数1，a1-参数2，a2-参数3...
+
+        // 压栈的顺序为文本参数顺序
+        int n = 0;
+        for (Node *arg = node->args; arg; arg = arg->next)
+        {
+            // 计算表达式的值
+            genExpr(arg);
+            // 压栈
+            push();
+            n++;
+        }
+        // 反向出栈
+        for (int i = n - 1; i >= 0; i--)
+            pop(argRegs[i]);
+
+        // 函数调用系统调用
         printf("\n # 调用函数%s\n", node->funcName);
         printf(" call %s\n", node->funcName);
         return;
@@ -291,11 +311,11 @@ void codegen(Function *prog)
 
     // 栈分配
     //----------------------// sp
-    // ra                   
+    // ra
     //----------------------// ra = sp - 8
     //  fp旧值，用于恢复fp
     //---------------------- //fp = sp - 16
-    //  本地变量表            
+    //  本地变量表
     //----------------------// sp = sp - 16 - stackSize
     //  表达式生成
     //----------------------//
