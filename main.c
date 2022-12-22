@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     }
 
     char *currentInput = argv[1];
-    // char *currentInput = "{ return ret3(); }";
+    // char *currentInput = "int main() { return 0; }";
 
     printf("# %s\n\n", currentInput);
 

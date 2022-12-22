@@ -172,7 +172,19 @@ static Type *declspec(Token **rest, Token *tok)
     return tyInt;
 }
 
-// declarator = "*"* ident
+// "(" ")"
+static Type *typeSuffix(Token **rest, Token *tok, Type *ty)
+{
+    if (equal(tok, "("))
+    {
+        *rest = skip(tok->next, ")");
+        return newFuncType(ty);
+    }
+    *rest = tok;
+    return ty;
+}
+
+// declarator = "*"* ident typeSuffix
 static Type *declarator(Token **rest, Token *tok, Type *ty)
 {
     // "*"*
@@ -187,8 +199,12 @@ static Type *declarator(Token **rest, Token *tok, Type *ty)
     }
 
     // ident
-    ty->tok = tok;
-    *rest = tok->next;
+    Token *ident = tok;
+    // typeSuffix
+    ty = typeSuffix(&tok, tok->next, ty);
+    // 变量名 | 函数名
+    ty->tok = ident;
+    *rest = tok;
     return ty;
 }
 
@@ -712,14 +728,38 @@ static Node *primary(Token **rest, Token *tok)
     errorTok(tok, "expected identifier or num");
 }
 
+// function = declspec declarator ident "(" ")" compoundStmt*
+static Function *function(Token **rest, Token *tok)
+{
+    Type *ty = declspec(&tok, tok);
+    ty = declarator(&tok, tok, ty);
+
+    // 清空本地变量表
+    locals = NULL;
+
+    Function *func = calloc(1, sizeof(Function));
+    // 函数名从type中保存的token中复制
+    func->name = getIdent(ty->tok);
+    // 函数体语句保存在body
+    func->body = compoundStmt(&tok, tok);
+    // 新生成的本地变量表
+    func->locals = locals;
+
+    *rest = tok;
+    return func;
+}
+
+// program = function*
 Function *parse(Token *tok)
 {
-    Node *body = compoundStmt(&tok, tok);
+    Function head = {};
+    Function *cur = &head;
 
-    // 封装为Function
-    Function *prog = calloc(1, sizeof(Function));
-    prog->body = body;
-    prog->locals = locals;
-    // 此时还未分配stackSize和locals里var的stack地址 => 代码生成时处理
-    return prog;
+    while (tok->kind != TOK_EOF)
+    {
+        cur->next = function(&tok, tok);
+        cur = cur->next;
+    }
+
+    return head.next;
 }

@@ -18,6 +18,14 @@ Type *newPointer(Type *base)
     return ty;
 }
 
+// 构造函数类型
+Type *newFuncType(Type *returnTy) {
+    Type *ty = calloc(1, sizeof(Type));
+    ty->kind = TY_FUNC;
+    ty->returnTy = returnTy;
+    return ty;
+}
+
 // 为ast节点node，及其子节点，递归的添加类型
 void addType(Node *node)
 {

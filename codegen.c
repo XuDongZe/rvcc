@@ -4,13 +4,16 @@
 static int depth;
 // 寄存器表
 static char *argRegs[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6"};
+static char *regA0 = "a0";
+static char *regA1 = "a1";
+// 当前函数
+static Function *currentFn;
 
 // 压栈，结果临时压入栈中保存
 // sp为栈顶指针 stack pointer，栈反向向下增长。64位下，一个单位8个字节。
 // 不使用寄存器，因为需要存储的值的数量是变化的
-static void push(void)
+static void push()
 {
-    printf(" # a0压栈\n");
     printf(" addi sp, sp, -8\n");
     printf(" sd a0, 0(sp)\n");
     // 记录当前栈深度
@@ -42,16 +45,22 @@ static int alignTo(int n, int align)
 
 static void assignLVarOffset(Function *prog)
 {
-    int offset = 0;
-    for (Obj *var = prog->locals; var; var = var->next)
+    // 为每一个函数的本地变量表分配栈空间
+    for (Function *func = prog; func; func = func->next)
     {
-        // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
-        offset += 8;
-        // 栈向下增长。地址变小。offset是负数。
-        var->offset = -offset;
+        int offset = 0;
+        // 遍历处理所有本地变量
+        for (Obj *var = func->locals; var; var = var->next)
+        {
+            // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
+            // 每个本地变量分配8个字节的固定空间
+            offset += 8;
+            // 栈向下增长。地址变小。offset是负数。
+            var->offset = -offset;
+        }
+        // 栈大小 调整为16字节对齐
+        func->stackSize = alignTo(offset, 16);
     }
-    // 栈大小 调整为16字节对齐
-    prog->stackSize = alignTo(offset, 16);
 }
 
 static int count()
@@ -229,7 +238,8 @@ static void genStmt(Node *node)
         // 先计算子表达式值
         genStmt(node->lhs);
         // 程序返回: 跳转到标签处
-        printf(" j .L.return\n");
+        printf(" # 跳转到.L.return.%s段\n", currentFn->name);
+        printf(" j .L.return.%s\n", currentFn->name);
         return;
     case ND_BLOCK:
         // 依次计算body指向的stmt列表
@@ -304,71 +314,82 @@ static void genStmt(Node *node)
 
 void codegen(Function *prog)
 {
-    // 声明全局main段: 程序入口段
-    printf("# 声明全局main段: 程序入口段\n");
-    printf(" .global main\n");
-    printf("main:\n");
-
-    // 栈分配
-    //----------------------// sp
-    // ra
-    //----------------------// ra = sp - 8
-    //  fp旧值，用于恢复fp
-    //---------------------- //fp = sp - 16
-    //  本地变量表
-    //----------------------// sp = sp - 16 - stackSize
-    //  表达式生成
-    //----------------------//
-
-    // Prologue 前言
-
-    printf("# ========栈帧内存分配==========\n");
-    // 栈内存分配
-    // 将fp的旧值压栈，随后将sp的值保存到fp 后续sp可以变化进行压栈操作了。所以sp->fp两个寄存器，分割出来一部分栈空间。
-    // 问题：为何要用fp保存sp，而不用栈空间保存sp呢：因为栈空间只能访问栈顶，而fp寄存器可以随时访问。
-    // 后续计算栈内本地变量地址的时候，需要直接使用寄存器作为base值。所以选择fp来保存栈基址。
-    // fp: 程序栈帧基址(frame pointer)，sp: 栈顶指针
-    printf("# ========上下文保护: 寄存器==========\n");
-    // 保存ra
-    printf("# 保存ra\n");
-    printf(" addi sp, sp, -16\n");
-    printf(" sd ra, 8(sp)\n");
-    // 保存fp
-    printf("# 保存fp: 到栈帧中\n");
-    printf(" sd fp, 0(sp)\n");
-    // 保存sp
-    printf("# 保存sp: 加载到fp\n");
-    printf(" mv fp, sp\n");
-
-    printf("# ========栈帧分配: 本地变量表==========\n");
+    // printf("# ========栈帧分配: 本地变量表==========\n");
     // 在栈中分配变量表的内存空间: 映射变量和栈地址
     assignLVarOffset(prog);
-    // 调整栈顶指针
-    printf(" addi sp, sp, -%d\n", prog->stackSize);
 
-    printf("# ========代码生成==========\n");
-    for (Node *n = prog->body; n; n = n->next)
+    // 遍历每一个函数，进行代码生成
+    for (Function *func = prog; func; func = func->next)
     {
-        genStmt(n);
+        // 声明全局main段: 程序入口段
+        printf("# ==========%s段开始================\n", func->name);
+        printf("\n  # 声明全局%s段\n", func->name);
+        printf(" .global %s\n", func->name);
+        printf("%s:\n", func->name);
+
+        // 全局函数指针
+        currentFn = func;
+
+        // 栈分配
+        //----------------------// sp
+        // ra
+        //----------------------// ra = sp - 8
+        // fp
+        //---------------------- //fp = sp - 16
+        //  本地变量表
+        //----------------------// sp = sp - 16 - stackSize
+        //  表达式生成
+        //----------------------//
+
+        // Prologue 前言
+        // 栈内存分配
+        // 将fp的旧值压栈，随后将sp的值保存到fp 后续sp可以变化进行压栈操作了。所以sp->fp两个寄存器，分割出来一部分栈空间。
+        // 问题：为何要用fp保存sp，而不用栈空间保存sp呢：因为栈空间只能访问栈顶，而fp寄存器可以随时访问。
+        // 后续计算栈内本地变量地址的时候，需要直接使用寄存器作为base值。所以选择fp来保存栈基址。
+        // fp: 程序栈帧基址(frame pointer)，sp: 栈顶指针
+
+        // 保存ra
+        printf("# 保存ra\n");
+        printf(" addi sp, sp, -8\n");
+        printf(" sd ra, 0(sp)\n");
+        // 保存fp
+        printf("# 保存fp\n");
+        printf(" addi sp, sp, -8\n");
+        printf(" sd fp, 0(sp)\n");
+        // 保存sp
+        printf("# 保存sp: 加载到fp\n");
+        printf(" mv fp, sp\n");
+
+        // 调整栈顶指针
+        printf(" addi sp, sp, -%d\n", prog->stackSize);
+
+        printf("# ========%s段主体代码==========\n", func->name);
+        genStmt(func->body);
+ 
+        // return标签
+        printf(" # return段标签\n");
+        printf(".L.return.%s:\n", func->name);
+        printf("# ========%s段结束==========\n", func->name);
+
+        // Epilogue 后语
+        printf("# ========上下文恢复: 寄存器==========\n");
+        // 恢复sp
+        printf(" # 恢复sp, 从fp中\n");
+        printf(" mv sp, fp\n");
+        // 恢复fp
+        printf(" # 恢复fp, 从栈中\n");
+        printf(" ld fp, 0(sp)\n");
+        printf(" addi sp, sp, 8\n");
+        // 恢复ra
+        printf(" #恢复ra\n");
+        printf(" ld ra, 0(sp)\n");
+        printf(" addi sp, sp, 8\n");
+
         // 如果stack未清空 报错
         assert(depth == 0);
+
+        // 系统调用返回
+        printf("# 将a0值返回给系统调用\n");
+        printf(" ret\n");
     }
-
-    printf(" # return标签\n");
-    printf(".L.return:\n");
-
-    // Epilogue 后语
-    printf("# ========上下文恢复: 寄存器==========\n");
-    // 恢复sp
-    printf(" # 恢复sp, 从fp中\n");
-    printf(" mv sp, fp\n");
-    // 恢复fp
-    printf(" # 恢复fp, 从栈中\n");
-    pop("fp");
-    // 恢复ra
-    printf(" #恢复ra\n");
-    pop("ra");
-
-    printf("# ========将a0值返回给系统调用==========\n");
-    printf(" ret\n");
 }

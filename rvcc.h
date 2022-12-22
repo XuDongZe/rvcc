@@ -53,6 +53,9 @@ struct Obj
 typedef struct Function Function;
 struct Function
 {
+    Function *next; // 指向下一个函数 成链
+
+    char *name;     // 函数名
     Node *body;    // 函数体
     Obj *locals;   // 本地变量表
     int stackSize; // 进入函数时，动态计算的栈大小
@@ -124,13 +127,15 @@ bool consume(Token **rest, Token *tok, char *str);
 // 类型系统
 // 类型枚举
 typedef enum {
-    TY_INT,    // 整数
+    TY_INT,     // 整数
     TY_PTR,     // 指针
+    TY_FUNC,    // 函数
 } TypeKind;
 
 struct Type {
     TypeKind kind;  // 类型枚举
     Type *base;     // 指向的类型
+    Type *returnTy; // 函数返回的类型
     Token *tok;     // 指向的token
 };
 
@@ -142,7 +147,8 @@ bool isInteger(Type *type);
 void addType(Node *node);
 // 新建指针类型
 Type *newPointer(Type *base);
-
+// 新建函数类型
+Type *newFuncType(Type *returnTy);
 // 词法分析 入口函数
 Token *tokenize(char *input);
 
