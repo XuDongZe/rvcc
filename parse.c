@@ -100,6 +100,15 @@ static char *getIdent(Token *tok)
 
 // program = stmt*
 
+// declspec = "int"
+static Type *declspec(Token **rest, Token *tok);
+// declarator = "*"* ident typeSuffix
+static Type *declarator(Token **rest, Token *tok, Type *ty);
+// typeSuffix = ( "(" funcParams? ")" )?
+// funcParams = param ("," param)*
+// param = declspec declrator
+static Type *typeSuffix(Token **rest, Token *tok, Type *ty);
+
 // stmt = returnStmt | compoundStmt | ifStmt | forStmt | whileStmt | exprStmt
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
 // declspec = "int"
@@ -172,13 +181,40 @@ static Type *declspec(Token **rest, Token *tok)
     return tyInt;
 }
 
-// "(" ")"
+// typeSuffix = ( "(" funcParams? ")" )?
+// funcParams = param ("," param)*
+// param = declspec declrator
 static Type *typeSuffix(Token **rest, Token *tok, Type *ty)
 {
+    // ( "(" funcParams? ")")?
     if (equal(tok, "("))
     {
-        *rest = skip(tok->next, ")");
-        return newFuncType(ty);
+        // 跳过"("
+        tok = tok->next;
+
+        // 构造形参列表
+        Type head = {};
+        Type *cur = &head;
+
+        while (!equal(tok, ")"))
+        {
+            // funcParams = param ("," param)*
+            // param = declspec declarator
+            if (cur != &head)
+            {
+                tok = skip(tok, ",");
+            }
+            Type *baseTy = declspec(&tok, tok);
+            Type *declTy = declarator(&tok, tok, baseTy);
+            // 形参复制
+            cur->next = copyType(declTy);
+            cur = cur->next;
+        }
+        *rest = skip(tok, ")");
+
+        Type *funcTy = newFuncType(ty);
+        funcTy->params = head.next;
+        return funcTy;
     }
     *rest = tok;
     return ty;
@@ -728,6 +764,17 @@ static Node *primary(Token **rest, Token *tok)
     errorTok(tok, "expected identifier or num");
 }
 
+// 形参 变量生命
+static void createParamLVars(Type *param)
+{
+    if (!param)
+        return;
+    // 递归到形参最底部
+    createParamLVars(param->next);
+    // 最后一个形式参数 是第一个添加的。头插法，插入完毕后locals指向第一个参数。
+    newLVar(getIdent(param->tok), param);
+}
+
 // function = declspec declarator ident "(" ")" compoundStmt*
 static Function *function(Token **rest, Token *tok)
 {
@@ -740,11 +787,13 @@ static Function *function(Token **rest, Token *tok)
     Function *func = calloc(1, sizeof(Function));
     // 函数名从type中保存的token中复制
     func->name = getIdent(ty->tok);
+    // 形参列表
+    createParamLVars(ty->params);
+    func->params = locals;
     // 函数体语句保存在body
     func->body = compoundStmt(&tok, tok);
-    // 新生成的本地变量表
+    // 新生成的本地变量表 包含形参列表
     func->locals = locals;
-
     *rest = tok;
     return func;
 }

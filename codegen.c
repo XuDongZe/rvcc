@@ -14,6 +14,7 @@ static Function *currentFn;
 // 不使用寄存器，因为需要存储的值的数量是变化的
 static void push()
 {
+    printf("# a0压栈[%d]\n", depth+1);
     printf(" addi sp, sp, -8\n");
     printf(" sd a0, 0(sp)\n");
     // 记录当前栈深度
@@ -24,7 +25,7 @@ static void push()
 static void pop(char *reg)
 {
     // load double,
-    // printf(" # 出栈到%s\n", reg);
+    printf(" # [%d]出栈,保存到寄存器%s\n", depth, reg);
     printf(" ld %s, 0(sp)\n", reg);
     printf(" addi sp, sp, 8\n");
     depth--;
@@ -80,13 +81,13 @@ static void genAddr(Node *node)
     {
     case ND_VAR:
         // fp为栈帧起始地址
-        printf(" # 将变量的栈帧偏移地址加载到a0\n");
+        printf("# 加载变量%s的栈内地址到a0\n", node->var->name);
         printf(" addi a0, fp, %d\n", node->var->offset);
         // 此时a0的值为fp+offset。var的内存地址
         return;
         break;
     case ND_DEREF:
-        // 解引用
+        // 解引用，与取地址抵消了
         genExpr(node->lhs);
         return;
     default:
@@ -109,15 +110,17 @@ static void genExpr(Node *node)
     case ND_VAR:
         // return:a0=node->name变量的值
         // 计算node内变量的内存地址，保存到a0
+        
         genAddr(node);
         // 访问a0地址中存储的数据，加载到a0
-        printf(" #访问a0地址指向的内存数据，加载到a0\n");
+        printf("# a0=mem[a0]\n");
         printf(" ld a0, 0(a0)\n");
         return;
     case ND_FUNCALL:
         // funcall前言，准备参数堆栈。
         // a0-参数1，a1-参数2，a2-参数3...
 
+        printf("# 调用函数%s前: 实参传递到寄存器\n", node->funcName);
         // 压栈的顺序为文本参数顺序
         int n = 0;
         for (Node *arg = node->args; arg; arg = arg->next)
@@ -133,7 +136,7 @@ static void genExpr(Node *node)
             pop(argRegs[i]);
 
         // 函数调用系统调用
-        printf("\n # 调用函数%s\n", node->funcName);
+        printf("# 调用函数%s\n", node->funcName);
         printf(" call %s\n", node->funcName);
         return;
     case ND_NEG:
@@ -166,7 +169,7 @@ static void genExpr(Node *node)
         // 左值地址弹栈
         pop("a1");
         // 此时a1为左值地址，a0为右值。将a0寄存器内存放的值，存储到a1地址指向的内存处。
-        printf(" # 访问a1内地址指向的内存数据, 加载到a0\n");
+        printf(" # a0=mem[a1]\n");
         printf(" sd a0, 0(a1)\n");
         return;
     default:
@@ -188,26 +191,34 @@ static void genExpr(Node *node)
     switch (node->kind)
     {
     case ND_ADD:
+        printf("# a0=a0+a1\n");
         printf(" add a0, a0, a1\n");
         return;
     case ND_SUB:
+        printf("# a0=a0-a1\n");
         printf(" sub a0, a0, a1\n");
         return;
     case ND_MUL:
+        printf("# a0=a0*a1\n");
         printf(" mul a0, a0, a1\n");
         return;
     case ND_DIV:
+        printf("# a0=a0/a1\n");
         printf(" div a0, a0, a1\n");
         return;
     case ND_EQ:
         // a0 = a0 ^ a1
+        printf("# a0=a0^a1\n");
         printf(" xor a0, a0, a1\n");
         // 如果a0寄存器的值为0, 即a0 == a1, 置a0为1
+        printf("# 如果a0寄存器的值为0, 即a0 == a1, 则a0=1\n");
         printf(" seqz a0, a0\n");
         return;
     case ND_NEQ:
+        printf("# a0=a0^a1\n");
         printf(" xor a0, a0, a1\n");
         // 如果a0寄存器的值不为0, 即a0 != a1, 置a0为1
+        printf("# 如果a0寄存器的值为0, 即a0 != a1, 则a0=1\n");
         printf(" snez a0, a0\n");
         return;
     case ND_LT:
@@ -218,6 +229,7 @@ static void genExpr(Node *node)
         // a0<=a1 == 1 => !(a0>a1)
         printf(" slt a0, a1, a0\n");
         // 此时a0的值为1或者0, 对a0取反 相当于 a0^1
+        printf("# 此时a0的值为1或者0, 对a0取反 相当于 a0^1\n");
         printf(" xori a0, a0, 1\n");
         return;
     default:
@@ -322,8 +334,8 @@ void codegen(Function *prog)
     for (Function *func = prog; func; func = func->next)
     {
         // 声明全局main段: 程序入口段
-        printf("# ==========%s段开始================\n", func->name);
-        printf("\n  # 声明全局%s段\n", func->name);
+        printf("\n# ==========%s段开始================\n", func->name);
+        printf("# 声明全局%s段\n", func->name);
         printf(" .global %s\n", func->name);
         printf("%s:\n", func->name);
 
@@ -349,19 +361,28 @@ void codegen(Function *prog)
         // fp: 程序栈帧基址(frame pointer)，sp: 栈顶指针
 
         // 保存ra
-        printf("# 保存ra\n");
+        printf("# ra压栈\n");
         printf(" addi sp, sp, -8\n");
         printf(" sd ra, 0(sp)\n");
         // 保存fp
-        printf("# 保存fp\n");
+        printf("# fp压栈\n");
         printf(" addi sp, sp, -8\n");
         printf(" sd fp, 0(sp)\n");
         // 保存sp
-        printf("# 保存sp: 加载到fp\n");
+        printf("# 加载sp到fp\n");
         printf(" mv fp, sp\n");
 
         // 调整栈顶指针
-        printf(" addi sp, sp, -%d\n", prog->stackSize);
+        printf("# 分配本地变量表栈空间(对齐到16字节)\n");
+        printf(" addi sp, sp, -%d\n", func->stackSize);
+
+        printf("# ===将预先存储的实参列表从寄存器加载到对应的栈空间中===\n");
+        int i = 0;
+        for (Obj *param=func->params; param; param=param->next) {
+            // FUNCALL指令中 call汇编指令调用之前 第一个实参保存在a0中，第二个保存在a1中，以此类推
+            printf("# 从寄存器%s中加载参数%s到栈中\n", argRegs[i], param->name);
+            printf("sd %s, %d(fp)\n", argRegs[i++], param->offset);
+        }
 
         printf("# ========%s段主体代码==========\n", func->name);
         genStmt(func->body);
@@ -381,7 +402,7 @@ void codegen(Function *prog)
         printf(" ld fp, 0(sp)\n");
         printf(" addi sp, sp, 8\n");
         // 恢复ra
-        printf(" #恢复ra\n");
+        printf(" # 恢复ra\n");
         printf(" ld ra, 0(sp)\n");
         printf(" addi sp, sp, 8\n");
 

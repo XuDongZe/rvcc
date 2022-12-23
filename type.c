@@ -26,6 +26,12 @@ Type *newFuncType(Type *returnTy) {
     return ty;
 }
 
+Type *copyType(Type *base) {
+    Type *ty = calloc(1, sizeof(Type));
+    *ty = *base;
+    return ty;
+}
+
 // 为ast节点node，及其子节点，递归的添加类型
 void addType(Node *node)
 {

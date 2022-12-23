@@ -56,6 +56,7 @@ struct Function
     Function *next; // 指向下一个函数 成链
 
     char *name;     // 函数名
+    Obj *params;    // 形参
     Node *body;    // 函数体
     Obj *locals;   // 本地变量表
     int stackSize; // 进入函数时，动态计算的栈大小
@@ -135,8 +136,12 @@ typedef enum {
 struct Type {
     TypeKind kind;  // 类型枚举
     Type *base;     // 指向的类型
+
+    Token *tok;     // 指向的token: 变量名 函数名
+
     Type *returnTy; // 函数返回的类型
-    Token *tok;     // 指向的token
+    Type *params;   // 函数的形参
+    Type *next;     // 成链（函数的形参列表）
 };
 
 // 全局变量
@@ -149,6 +154,10 @@ void addType(Node *node);
 Type *newPointer(Type *base);
 // 新建函数类型
 Type *newFuncType(Type *returnTy);
+// 复制类型
+Type *copyType(Type *ty);
+
+
 // 词法分析 入口函数
 Token *tokenize(char *input);
 
