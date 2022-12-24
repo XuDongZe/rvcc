@@ -1,7 +1,8 @@
 #include "rvcc.h"
 
 // (Type){...}构造了一个复合字面量，相当于Type的匿名变量。
-Type *tyInt = &(Type){TY_INT, NULL};
+// TypeKind = TY_INIT, size = 8
+Type *tyInt = &(Type){TY_INT, 8};
 
 // 判断给定type是否是整型
 bool isInteger(Type *ty)
@@ -15,18 +16,34 @@ Type *newPointer(Type *base)
     Type *ty = calloc(1, sizeof(Type));
     ty->kind = TY_PTR;
     ty->base = base;
+    ty->size = 8;
     return ty;
 }
 
 // 构造函数类型
-Type *newFuncType(Type *returnTy) {
+Type *newFuncType(Type *returnTy)
+{
     Type *ty = calloc(1, sizeof(Type));
     ty->kind = TY_FUNC;
     ty->returnTy = returnTy;
     return ty;
 }
 
-Type *copyType(Type *base) {
+// 构造数组类型
+Type *newArrayType(Type *base, int len)
+{
+    Type *ty = calloc(1, sizeof(Type));
+    ty->kind = TY_ARRAY;
+    ty->base = base;
+    ty->arrayLen = len;
+    // 数组的size是元素size * 元素数量
+    ty->size = len * base->size;
+    return ty;
+}
+
+// 类型复制
+Type *copyType(Type *base)
+{
     Type *ty = calloc(1, sizeof(Type));
     *ty = *base;
     return ty;
@@ -73,6 +90,7 @@ void addType(Node *node)
         // 节点的类型就是节点内变量的声明类型。是在变量声明时构造的。
         node->type = node->var->ty;
         return;
+    // 节点类型为左部节点的类型
     // 取相反数
     case ND_NEG:
     // 算数运算
@@ -80,27 +98,32 @@ void addType(Node *node)
     case ND_SUB:
     case ND_MUL:
     case ND_DIV:
+        node->type = node->lhs->type;
+        return;
     // 赋值语句类型为左值的声明类型
     case ND_ASSIGN:
+        // 数组不能做左值
+        if (node->lhs->type->kind == TY_ARRAY)
+            errorTok(node->lhs->tok, "not an lvalue");
         node->type = node->lhs->type;
         return;
     // 取地址 类型为指针。指针指向子节点
     case ND_ADDR:
-        node->type = newPointer(node->lhs->type);
+        Type *ty = node->lhs->type;
+        // int x[4]; int *y = &x; y的类型是 int *，是指向数组元素类型(base)的指针
+        // 其实数组是语法糖 需要在编译阶段做特殊处理
+        if (ty->kind == TY_ARRAY)
+            node->type = newPointer(ty->base);
+        else
+            node->type = newPointer(node->lhs->type);
         return;
     // 解引用 此时是叶子节点，
     case ND_DEREF:
+        // 子节点没有base类型。不可以解除引用操作。这里用base判断来对TY_PTR和TY_ARRAY做统一处理
+        if (!node->lhs->type->base)
+            errorTok(node->tok, "invalid pointer derefrence");
         // 子节点是指针，接触引用后，类型为指针指向的原数据的类型。
-        // y = &x; 则*y类型是x的类型。
-        if (node->lhs->type->kind == TY_PTR)
-        {
-            node->type = node->lhs->type->base;
-        }
-        else
-        {
-            // todo
-            node->type = TY_INT;
-        }
+        node->type = node->lhs->type->base;
         return;
     default:
         break;

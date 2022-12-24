@@ -91,34 +91,57 @@ static char *getIdent(Token *tok)
     return strndup(tok->loc, tok->len);
 }
 
-// return: 生成一个AST树节点。
-// rest: 在callee内部修改当前tok的指向。
-// 在caller调用newASTNode函数前后，都要保持tok的栈值，是当前要处理的token的地址。
-// 也就是tok在newASTNode调用前，调用时，调用后，都得保持tok是当前待处理的token数据的指针。
-//
+static int getNumber(Token *tok)
+{
+    if (tok->kind != TOK_NUM)
+    {
+        errorTok(tok, "expected a number");
+    }
+    return tok->val;
+}
+
+// 形参 本地变量声明
+static void createParamLVars(Type *param)
+{
+    if (!param)
+        return;
+    // 递归到形参最底部
+    createParamLVars(param->next);
+    // 最后一个形式参数 是第一个添加的。头插法，插入完毕后locals指向第一个参数。
+    newLVar(getIdent(param->tok), param);
+}
+
+/**
+ * return: 生成一个AST树节点。
+ * rest: 在callee内部修改当前tok的指向。
+ * 在caller调用newASTNode函数前后，都要保持tok的栈值，是当前要处理的token的地址。
+ * 也就是tok在newASTNode调用前，调用时，调用后，都得保持tok是当前待处理的token数据的指针。
+**/
 // static Node *newASTNode(Token **rest, Token *tok);
 
-// program = stmt*
+// 下面是程序的推导式
 
+// program = functionDefintion*
+// functionDefinition = declspec declarator compoundStmt
+
+// 类型系统
 // declspec = "int"
-static Type *declspec(Token **rest, Token *tok);
 // declarator = "*"* ident typeSuffix
-static Type *declarator(Token **rest, Token *tok, Type *ty);
-// typeSuffix = ( "(" funcParams? ")" )?
+// typeSuffix = ( "(" funcParams? ")" | "[" num "]" )?
 // funcParams = param ("," param)*
 // param = declspec declrator
-static Type *typeSuffix(Token **rest, Token *tok, Type *ty);
 
+// 语句
 // stmt = returnStmt | compoundStmt | ifStmt | forStmt | whileStmt | exprStmt
-// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
-// declspec = "int"
-// declarator = "*"* ident
 // returnStmt = "return" exprStmt
-// compoundStmt = "{" (declaration | stmt)* "}"
+// compoundStmt = "{" (declarationStmt | stmt)* "}"
+// declarationStmt = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
 // ifStmt = "if" "(" expr ")" stmt ("else" stmt)?
 // forStmt = "for" "(" (expr:init)? ";" (expr:cond)? ";" (expr:inc)? ")" stmt
 // whileStmt = "while" "(" expr ")" stmt
 // exprStmt = expr? ";"
+
+// 表达式
 // expr = assign
 // assign = equality ("=" assign)?
 // equality = relational ("==" relational || "!=" relational)*
@@ -126,16 +149,27 @@ static Type *typeSuffix(Token **rest, Token *tok, Type *ty);
 // add = mul ("*" mul | "/" mul)
 // mul = unary ("*" unary | "/" unary)*
 // unary = ("+" | "-" | "&" | "*") unary | primary
+
+// 括号和基本类型
 // primary = "(" expr ")" | ident | num
-static Node *program(Token **rest, Token *tok);
+
+// 类型系统
+static Type *declspec(Token **rest, Token *tok);
+static Type *declarator(Token **rest, Token *tok, Type *ty);
+static Type *typeSuffix(Token **rest, Token *tok, Type *ty);
+static Type *funcParams(Token **rest, Token *tok, Type *ty);
+
+static Function *function(Token **rest, Token *tok);
+// 语句
 static Node *stmt(Token **rest, Token *tok);
-static Node *declaration(Token **rest, Token *tok);
+static Node *declarationStmt(Token **rest, Token *tok);
 static Node *returnStmt(Token **rest, Token *tok);
 static Node *compoundStmt(Token **rest, Token *tok);
 static Node *ifStmt(Token **rest, Token *tok);
 static Node *forStmt(Token **rest, Token *tok);
 static Node *whileStmt(Token **rest, Token *tok);
 static Node *exprStmt(Token **rest, Token *tok);
+// 表达式
 static Node *expr(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
 static Node *equality(Token **rest, Token *tok);
@@ -143,9 +177,88 @@ static Node *relational(Token **rest, Token *tok);
 static Node *add(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
+// 基本类型
 static Node *primary(Token **rest, Token *tok);
 
-// program = stmt*
+// declspec = "int"
+static Type *declspec(Token **rest, Token *tok)
+{
+    *rest = skip(tok, "int");
+    return tyInt;
+}
+
+// declarator = "*"* ident typeSuffix
+static Type *declarator(Token **rest, Token *tok, Type *ty)
+{
+    // "*"*
+    while (consume(&tok, tok, "*"))
+    {
+        ty = newPointer(ty);
+    }
+
+    if (tok->kind != TOK_IDENT)
+    {
+        errorTok(tok, "expected a variable name");
+    }
+
+    // ident
+    Token *ident = tok;
+    // typeSuffix
+    ty = typeSuffix(&tok, tok->next, ty);
+    // 变量名 | 函数名
+    ty->tok = ident;
+    *rest = tok;
+    return ty;
+}
+
+// typeSuffix = ( "(" funcParams? ")" )?
+static Type *typeSuffix(Token **rest, Token *tok, Type *ty)
+{
+    // ( "(" funcParams? ")")?
+    if (equal(tok, "("))
+        return funcParams(rest, tok->next, ty);
+
+    if (equal(tok, "["))
+    {
+        int size = getNumber(tok->next);
+        *rest = skip(tok->next->next, "]");
+        return newArrayType(ty, size);
+    }
+
+    *rest = tok;
+    return ty;
+}
+
+// funcParams = param ("," param)*
+// param = declspec declrator
+static Type *funcParams(Token **rest, Token *tok, Type *ty)
+{
+    // tok = "("->next
+
+    // 构造形参列表
+    Type head = {};
+    Type *cur = &head;
+
+    // funcParams = param ("," param)*
+    while (!equal(tok, ")"))
+    {
+        if (cur != &head)
+            tok = skip(tok, ",");
+
+        // param = declspec declarator
+        Type *baseTy = declspec(&tok, tok);
+        Type *declTy = declarator(&tok, tok, baseTy);
+        // 形参复制
+        cur->next = copyType(declTy);
+        cur = cur->next;
+    }
+    *rest = skip(tok, ")");
+
+    Type *funcTy = newFuncType(ty);
+    // 传递形参
+    funcTy->params = head.next;
+    return funcTy;
+}
 
 // stmt = returnStmt | compoundStmt | ifStmt | exprStmt
 static Node *stmt(Token **rest, Token *tok)
@@ -173,80 +286,9 @@ static Node *stmt(Token **rest, Token *tok)
     return exprStmt(rest, tok);
 }
 
-// declspec = "int"
-// decarator specifier
-static Type *declspec(Token **rest, Token *tok)
-{
-    *rest = skip(tok, "int");
-    return tyInt;
-}
-
-// typeSuffix = ( "(" funcParams? ")" )?
-// funcParams = param ("," param)*
-// param = declspec declrator
-static Type *typeSuffix(Token **rest, Token *tok, Type *ty)
-{
-    // ( "(" funcParams? ")")?
-    if (equal(tok, "("))
-    {
-        // 跳过"("
-        tok = tok->next;
-
-        // 构造形参列表
-        Type head = {};
-        Type *cur = &head;
-
-        while (!equal(tok, ")"))
-        {
-            // funcParams = param ("," param)*
-            // param = declspec declarator
-            if (cur != &head)
-            {
-                tok = skip(tok, ",");
-            }
-            Type *baseTy = declspec(&tok, tok);
-            Type *declTy = declarator(&tok, tok, baseTy);
-            // 形参复制
-            cur->next = copyType(declTy);
-            cur = cur->next;
-        }
-        *rest = skip(tok, ")");
-
-        Type *funcTy = newFuncType(ty);
-        funcTy->params = head.next;
-        return funcTy;
-    }
-    *rest = tok;
-    return ty;
-}
-
-// declarator = "*"* ident typeSuffix
-static Type *declarator(Token **rest, Token *tok, Type *ty)
-{
-    // "*"*
-    while (consume(&tok, tok, "*"))
-    {
-        ty = newPointer(ty);
-    }
-
-    if (tok->kind != TOK_IDENT)
-    {
-        errorTok(tok, "expected a variable name");
-    }
-
-    // ident
-    Token *ident = tok;
-    // typeSuffix
-    ty = typeSuffix(&tok, tok->next, ty);
-    // 变量名 | 函数名
-    ty->tok = ident;
-    *rest = tok;
-    return ty;
-}
-
-// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
+// declarationStmt = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
 // int x=1, *z=&x, y=*z=2;
-static Node *declaration(Token **rest, Token *tok)
+static Node *declarationStmt(Token **rest, Token *tok)
 {
     Type *base = declspec(&tok, tok);
 
@@ -302,21 +344,21 @@ static Node *returnStmt(Token **rest, Token *tok)
     return node;
 }
 
-// compoundStmt = "{" (declaration | stmt)* "}"
+// compoundStmt = "{" (declarationStmt | stmt)* "}"
 static Node *compoundStmt(Token **rest, Token *tok)
 {
     Token *startTok = tok;
 
     // "{"
     tok = skip(tok, "{");
-    // (declaration | stmt)*
+    // (declarationStmt | stmt)*
     Node head = {};
     Node *cur = &head;
     while (!equal(tok, "}"))
     {
-        // declaration
+        // declarationStmt
         if (equal(tok, "int"))
-            cur->next = declaration(&tok, tok);
+            cur->next = declarationStmt(&tok, tok);
         // stmt
         else
             cur->next = stmt(&tok, tok);
@@ -744,7 +786,7 @@ static Node *primary(Token **rest, Token *tok)
             return nd;
         }
 
-        // var
+        // var: 普通变量 | 数组变量
         Obj *var = findLVar(tok);
         if (!var)
         {
@@ -764,18 +806,9 @@ static Node *primary(Token **rest, Token *tok)
     errorTok(tok, "expected identifier or num");
 }
 
-// 形参 变量生命
-static void createParamLVars(Type *param)
-{
-    if (!param)
-        return;
-    // 递归到形参最底部
-    createParamLVars(param->next);
-    // 最后一个形式参数 是第一个添加的。头插法，插入完毕后locals指向第一个参数。
-    newLVar(getIdent(param->tok), param);
-}
 
-// function = declspec declarator ident "(" ")" compoundStmt*
+
+// function = declspec declarator compoundStmt
 static Function *function(Token **rest, Token *tok)
 {
     Type *ty = declspec(&tok, tok);

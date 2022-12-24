@@ -14,7 +14,7 @@ static Function *currentFn;
 // 不使用寄存器，因为需要存储的值的数量是变化的
 static void push()
 {
-    printf("# a0压栈[%d]\n", depth+1);
+    printf("# a0压栈[%d]\n", depth + 1);
     printf(" addi sp, sp, -8\n");
     printf(" sd a0, 0(sp)\n");
     // 记录当前栈深度
@@ -55,7 +55,7 @@ static void assignLVarOffset(Function *prog)
         {
             // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
             // 每个本地变量分配8个字节的固定空间
-            offset += 8;
+            offset += var->ty->size;
             // 栈向下增长。地址变小。offset是负数。
             var->offset = -offset;
         }
@@ -73,6 +73,32 @@ static int count()
 static void genAddr(Node *node);
 static void genExpr(Node *node);
 static void genStmt(Node *node);
+// 访问a0（为一个地址）指向的栈地址中存储的数据，加载到a0
+static void load(Node *node);
+// 将栈顶值(为一个地址)存入a0
+static void store(void);
+
+// 访问a0地址中存储的数据，加载到a0
+static void load(Node *node)
+{
+    if (node->type->kind == TY_ARRAY)
+    {
+        // 数组类型不加载
+        return;
+    }
+    printf("# a0=mem[a0]\n");
+    printf(" ld a0, 0(a0)\n");
+}
+
+// 将栈顶值(为一个地址)存入a0
+static void store(void)
+{
+    // 左值地址弹栈
+    pop("a1");
+    // 此时a1为左值地址，a0为右值。将a0寄存器内存放的值，存储到a1地址指向的内存处。
+    printf(" # a0=mem[a1]\n");
+    printf(" sd a0, 0(a1)\n");
+};
 
 // 计算给定节点的绝对地址：变量，函数，指针
 static void genAddr(Node *node)
@@ -110,11 +136,9 @@ static void genExpr(Node *node)
     case ND_VAR:
         // return:a0=node->name变量的值
         // 计算node内变量的内存地址，保存到a0
-        
         genAddr(node);
         // 访问a0地址中存储的数据，加载到a0
-        printf("# a0=mem[a0]\n");
-        printf(" ld a0, 0(a0)\n");
+        load(node);
         return;
     case ND_FUNCALL:
         // funcall前言，准备参数堆栈。
@@ -156,7 +180,7 @@ static void genExpr(Node *node)
         genExpr(node->lhs);
         // 此时a0中保存着一个变量，将变量对应的值加载到a0。
         // y = &x; *y; *y时：计算y值时，得到x的地址。返回*addr, 再次load得到x的值。
-        printf(" ld a0, 0(a0)\n");
+        load(node);
         return;
     case ND_ASSIGN:
         // 计算方向：先处理地址
@@ -166,11 +190,7 @@ static void genExpr(Node *node)
         push();
         // 将右值保存到a0
         genExpr(node->rhs);
-        // 左值地址弹栈
-        pop("a1");
-        // 此时a1为左值地址，a0为右值。将a0寄存器内存放的值，存储到a1地址指向的内存处。
-        printf(" # a0=mem[a1]\n");
-        printf(" sd a0, 0(a1)\n");
+        store();
         return;
     default:
         break;
@@ -378,7 +398,8 @@ void codegen(Function *prog)
 
         printf("# ===将预先存储的实参列表从寄存器加载到对应的栈空间中===\n");
         int i = 0;
-        for (Obj *param=func->params; param; param=param->next) {
+        for (Obj *param = func->params; param; param = param->next)
+        {
             // FUNCALL指令中 call汇编指令调用之前 第一个实参保存在a0中，第二个保存在a1中，以此类推
             printf("# 从寄存器%s中加载参数%s到栈中\n", argRegs[i], param->name);
             printf("sd %s, %d(fp)\n", argRegs[i++], param->offset);
@@ -386,7 +407,7 @@ void codegen(Function *prog)
 
         printf("# ========%s段主体代码==========\n", func->name);
         genStmt(func->body);
- 
+
         // return标签
         printf(" # return段标签\n");
         printf(".L.return.%s:\n", func->name);

@@ -131,17 +131,25 @@ typedef enum {
     TY_INT,     // 整数
     TY_PTR,     // 指针
     TY_FUNC,    // 函数
+    TY_ARRAY,   // 数组
 } TypeKind;
 
 struct Type {
     TypeKind kind;  // 类型枚举
-    Type *base;     // 指向的类型
+    int size;       // sizeof的返回值
+
+    Type *base;     // 指向的类型: 指针指向的类型，数组的元素类型
 
     Token *tok;     // 指向的token: 变量名 函数名
 
+    // 函数
     Type *returnTy; // 函数返回的类型
-    Type *params;   // 函数的形参
-    Type *next;     // 成链（函数的形参列表）
+    Type *params;   // 函数的形参列表
+
+    // 数组
+    int arrayLen;   // 数组中的元素数量
+
+    Type *next;     // 成链
 };
 
 // 全局变量
@@ -154,6 +162,8 @@ void addType(Node *node);
 Type *newPointer(Type *base);
 // 新建函数类型
 Type *newFuncType(Type *returnTy);
+// 新建数组类型
+Type *newArrayType(Type *base, int len);
 // 复制类型
 Type *copyType(Type *ty);
 
