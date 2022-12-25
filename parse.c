@@ -221,7 +221,9 @@ static Type *typeSuffix(Token **rest, Token *tok, Type *ty)
     if (equal(tok, "["))
     {
         int size = getNumber(tok->next);
-        *rest = skip(tok->next->next, "]");
+        tok = skip(tok->next->next, "]");
+        ty = typeSuffix(&tok, tok, ty);
+        *rest = tok;
         return newArrayType(ty, size);
     }
 
@@ -607,10 +609,10 @@ static Node *typeAdd(Node *lhs, Node *rhs, Token *tok)
         rhs = t;
     }
 
-    // p+1 => p+1*8
+    // p+1 => p+1*sizeof((p->base))
     if (lhs->type->base && !rhs->type->base)
     {
-        Node *r = newBinary(ND_MUL, rhs, newNum(8, tok), tok);
+        Node *r = newBinary(ND_MUL, rhs, newNum(lhs->type->base->size, tok), tok);
         return newBinary(ND_ADD, lhs, r, tok);
     }
 
@@ -641,10 +643,10 @@ static Node *typeSub(Node *lhs, Node *rhs, Token *tok)
     }
 
     // ptr - num
-    // p-1 => p-1*8
+    // p-1 => p-1*sizeof(p->base)
     if (lhs->type->base && !rhs->type->base)
     {
-        Node *diff = newBinary(ND_MUL, rhs, newNum(8, tok), tok);
+        Node *diff = newBinary(ND_MUL, rhs, newNum(lhs->type->base->size, tok), tok);
         return newBinary(ND_SUB, lhs, diff, tok);
     }
 

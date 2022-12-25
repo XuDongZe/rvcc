@@ -49,6 +49,7 @@ static void assignLVarOffset(Function *prog)
     // 为每一个函数的本地变量表分配栈空间
     for (Function *func = prog; func; func = func->next)
     {
+        printf("# =====为函数%s的本地变量表分配栈空间======\n", func->name);
         int offset = 0;
         // 遍历处理所有本地变量
         for (Obj *var = func->locals; var; var = var->next)
@@ -58,6 +59,8 @@ static void assignLVarOffset(Function *prog)
             offset += var->ty->size;
             // 栈向下增长。地址变小。offset是负数。
             var->offset = -offset;
+            // 
+            printf("# 为本地变量%s分配栈内偏移地址为(%d)fp, size:%d\n", var->name, var->offset, var->ty->size);
         }
         // 栈大小 调整为16字节对齐
         func->stackSize = alignTo(offset, 16);
