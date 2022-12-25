@@ -785,7 +785,7 @@ static Node *postfix(Token **rest, Token *tok)
     return x;
 }
 
-// primary = "(" expr ")" | ident args? | num
+// primary = "(" expr ")" | "sizeof" unary | ident args? | num
 // args = "(" ")"
 static Node *primary(Token **rest, Token *tok)
 {
@@ -798,10 +798,22 @@ static Node *primary(Token **rest, Token *tok)
         *rest = skip(tok, ")");
         return node;
     }
+    if (tok->kind == TOK_KEKWORD)
+    {
+        if (equal(tok, "sizeof"))
+        {
+            // sizeof是编译期确定的一个常量
+            // 1. 计算sizeof的参数类型
+            Node *node = unary(rest, tok->next);
+            addType(node);
+            // 2. 返回node的type的size
+            return newNum(node->type->size, tok);
+        }
+    }
     // ident
     if (tok->kind == TOK_IDENT)
     {
-        // function
+        // function调用
         if (equal(tok->next, "("))
         {
             Node *nd = funcCall(&tok, tok);
