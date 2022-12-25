@@ -1,7 +1,9 @@
 #include "rvcc.h"
 
 // 本地变量表
-Obj *locals;
+static Obj *locals;
+// 全局变量表: 全局变量 | 函数
+Obj *globals;
 
 // 抽象语法树Node 数据结构 操作
 
@@ -65,18 +67,37 @@ static Obj *findLVar(Token *tok)
     return NULL;
 }
 
-// 在变量表中新增一个变量
-static Obj *newLVar(char *name, Type *ty)
+// 构造一个变量类型
+static Obj *newVar(char *name, Type *ty)
 {
     Obj *var = calloc(1, sizeof(Obj));
     // 拷贝标识符：locals中的name和token表中的loc，互不影响。指向两个值相同的字符串。
     var->name = name;
     var->ty = ty;
     // offset先不处理：offset按照链表内节点的index分配
+    return var;
+}
 
+// 构造局部变量 并将其保存到局部变量表中
+static Obj *newLVar(char *name, Type *ty)
+{
+    Obj *var = newVar(name, ty);
+    // 局部变量标记
+    var->isLocal = true;
     // 放置到链表中：放置到链表头部。所以地址分配是后进先分配的。是一个地址分配的栈。
     var->next = locals;
     locals = var;
+    // 返回新建的var
+    return var;
+}
+
+// 构造全局变量 并将其保存到全局变量表中
+static Obj *newGVar(char *name, Type *ty)
+{
+    Obj *var = newVar(name, ty);
+    // 放置到链表中：放置到链表头部。所以地址分配是后进先分配的。是一个地址分配的栈。
+    var->next = globals;
+    globals = var;
     // 返回新建的var
     return var;
 }
@@ -159,7 +180,7 @@ static Type *declarator(Token **rest, Token *tok, Type *ty);
 static Type *typeSuffix(Token **rest, Token *tok, Type *ty);
 static Type *funcParams(Token **rest, Token *tok, Type *ty);
 
-static Function *function(Token **rest, Token *tok);
+static Obj *function(Token **rest, Token *tok);
 // 语句
 static Node *stmt(Token **rest, Token *tok);
 static Node *declarationStmt(Token **rest, Token *tok);
@@ -842,7 +863,7 @@ static Node *primary(Token **rest, Token *tok)
 }
 
 // function = declspec declarator compoundStmt
-static Function *function(Token **rest, Token *tok)
+static Obj *function(Token **rest, Token *tok)
 {
     Type *ty = declspec(&tok, tok);
     ty = declarator(&tok, tok, ty);
@@ -850,9 +871,9 @@ static Function *function(Token **rest, Token *tok)
     // 清空本地变量表
     locals = NULL;
 
-    Function *func = calloc(1, sizeof(Function));
-    // 函数名从type中保存的token中复制
-    func->name = getIdent(ty->tok);
+    // 新建函数变量: 插入到全局变量表表头，设置函数类型，设置函数名
+    Obj *func = newGVar(getIdent(ty->tok), ty);
+    func->isFunction = true;
     // 形参列表
     createParamLVars(ty->params);
     func->params = locals;
@@ -860,21 +881,22 @@ static Function *function(Token **rest, Token *tok)
     func->body = compoundStmt(&tok, tok);
     // 新生成的本地变量表 包含形参列表
     func->locals = locals;
+
     *rest = tok;
     return func;
 }
 
 // program = function*
-Function *parse(Token *tok)
+Obj *parse(Token *tok)
 {
-    Function head = {};
-    Function *cur = &head;
+    // 清空全局变量
+    globals = NULL;
 
     while (tok->kind != TOK_EOF)
     {
-        cur->next = function(&tok, tok);
-        cur = cur->next;
+        // 构造函数 填充全局变量表
+        function(&tok, tok);
     }
 
-    return head.next;
+    return globals;
 }

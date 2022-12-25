@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
     Token *tok = tokenize(currentInput);
 
     // 语法分析
-    Function *prog = parse(tok);
+    Obj *prog = parse(tok);
 
     // 代码生成
     codegen(prog);

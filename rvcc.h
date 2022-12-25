@@ -43,23 +43,22 @@ typedef struct Node Node;
 typedef struct Obj Obj;
 struct Obj
 {
-    Obj *next;  // 指向下一个节点的链接
-    char *name; // 变量的标识符
-    Type *ty;   // 变量的类型
-    int offset; // 本地变量的栈偏移，基地址存放在fp。实际地址为：fp+offset
-};
+    // 成链
+    Obj *next;      // 指向下一个节点的链接
 
-// 函数表 节点类型
-typedef struct Function Function;
-struct Function
-{
-    Function *next; // 指向下一个函数 成链
+    char *name;     // 变量的标识符: 变量名 | 函数名
+    Type *ty;       // 变量的类型
 
-    char *name;     // 函数名
+    // 局部变量
+    bool isLocal;   // 是否是局部变量
+    int offset;     // 局部变量的栈偏移，基地址存放在fp。实际地址为：fp+offset
+
+    // 函数
+    bool isFunction;    // 是否是函数
     Obj *params;    // 形参
-    Node *body;    // 函数体
-    Obj *locals;   // 本地变量表
-    int stackSize; // 进入函数时，动态计算的栈大小
+    Node *body;     // 函数体
+    Obj *locals;    // 本地变量表
+    int stackSize;  // 进入函数时，动态计算的栈大小
 };
 
 typedef enum
@@ -78,9 +77,9 @@ typedef enum
     ND_BLOCK,       // 代码块
     ND_EXPR_STMT,   // 表达式语句
     ND_IF,          // if语句
-    ND_FOR,         // for语句
-    ND_VAR,         // 变量
-    ND_FUNCALL,     // 函数
+    ND_FOR,         // for语句 while语句
+    ND_VAR,         // 变量 普通变量|数组变量
+    ND_FUNCALL,     // 函数调用
     ND_DEREF,       // 解除引用 *
     ND_ADDR,        // 取地址 &
     ND_NUM,         // 数字
@@ -95,6 +94,7 @@ struct Node
     Token *tok;         // 节点对应的终结符
     Type *type;         // 节点对应的数据类型  
 
+    // 二元操作符
     struct Node *lhs;   // left-hand side
     struct Node *rhs;   // right-hand side
 
@@ -138,8 +138,9 @@ struct Type {
     TypeKind kind;  // 类型枚举
     int size;       // sizeof的返回值
 
-    Type *base;     // 指向的类型: 指针指向的类型，数组的元素类型
+    Type *next;     // 成链
 
+    Type *base;     // 指向的类型: 指针指向的类型，数组的元素类型
     Token *tok;     // 指向的token: 变量名 函数名
 
     // 函数
@@ -148,11 +149,9 @@ struct Type {
 
     // 数组
     int arrayLen;   // 数组中的元素数量
-
-    Type *next;     // 成链
 };
 
-// 全局变量
+// 全局变量 定义在type.c中
 extern Type *tyInt;
 // 判断类型是否是整型
 bool isInteger(Type *type);
@@ -167,12 +166,15 @@ Type *newArrayType(Type *base, int len);
 // 复制类型
 Type *copyType(Type *ty);
 
+// // 全局变量表: 全局变量 | 函数
+// // 定义在parse.c中
+// extern Obj *globals;
 
 // 词法分析 入口函数
 Token *tokenize(char *input);
 
 // 语法分析 入口函数
-Function *parse(Token *tok);
+Obj *parse(Token *tok);
 
 // 代码生成
-void codegen(Function *node);
+void codegen(Obj *node);

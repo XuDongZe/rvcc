@@ -7,7 +7,7 @@ static char *argRegs[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6"};
 static char *regA0 = "a0";
 static char *regA1 = "a1";
 // 当前函数
-static Function *currentFn;
+static Obj *currentFn;
 
 // 压栈，结果临时压入栈中保存
 // sp为栈顶指针 stack pointer，栈反向向下增长。64位下，一个单位8个字节。
@@ -44,11 +44,14 @@ static int alignTo(int n, int align)
     return ((n + align - 1) / align) * align;
 }
 
-static void assignLVarOffset(Function *prog)
+static void assignLVarOffset(Obj *prog)
 {
     // 为每一个函数的本地变量表分配栈空间
-    for (Function *func = prog; func; func = func->next)
+    for (Obj *func = prog; func; func = func->next)
     {
+        if (!func->isFunction)
+            continue;
+
         printf("# =====为函数%s的本地变量表分配栈空间======\n", func->name);
         int offset = 0;
         // 遍历处理所有本地变量
@@ -59,7 +62,7 @@ static void assignLVarOffset(Function *prog)
             offset += var->ty->size;
             // 栈向下增长。地址变小。offset是负数。
             var->offset = -offset;
-            // 
+            //
             printf("# 为本地变量%s分配栈内偏移地址为(%d)fp, size:%d\n", var->name, var->offset, var->ty->size);
         }
         // 栈大小 调整为16字节对齐
@@ -347,15 +350,18 @@ static void genStmt(Node *node)
     errorTok(node->tok, "invalid statment");
 }
 
-void codegen(Function *prog)
+void codegen(Obj *prog)
 {
     // printf("# ========栈帧分配: 本地变量表==========\n");
     // 在栈中分配变量表的内存空间: 映射变量和栈地址
     assignLVarOffset(prog);
 
     // 遍历每一个函数，进行代码生成
-    for (Function *func = prog; func; func = func->next)
+    for (Obj *func = prog; func; func = func->next)
     {
+        if (!func->isFunction)
+            continue;
+    
         // 声明全局main段: 程序入口段
         printf("\n# ==========%s段开始================\n", func->name);
         printf("# 声明全局%s段\n", func->name);
