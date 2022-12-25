@@ -116,7 +116,7 @@ static void createParamLVars(Type *param)
  * rest: 在callee内部修改当前tok的指向。
  * 在caller调用newASTNode函数前后，都要保持tok的栈值，是当前要处理的token的地址。
  * 也就是tok在newASTNode调用前，调用时，调用后，都得保持tok是当前待处理的token数据的指针。
-**/
+ **/
 // static Node *newASTNode(Token **rest, Token *tok);
 
 // 下面是程序的推导式
@@ -178,6 +178,7 @@ static Node *add(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 // 基本类型
+static Node *postfix(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
 // declspec = "int"
@@ -734,7 +735,7 @@ static Node *unary(Token **rest, Token *tok)
         return newUnary(ND_DEREF, unary(rest, tok->next), startTok);
     }
     // primary
-    return primary(rest, tok);
+    return postfix(rest, tok);
 }
 
 // funcCall = ident "(" assign ("," assign)? ")"
@@ -762,6 +763,26 @@ static Node *funcCall(Token **rest, Token *tok)
     nd->funcName = getIdent(startTok);
     nd->args = head.next;
     return nd;
+}
+
+// postfix = primary ( "[" expr "]" )*
+static Node *postfix(Token **rest, Token *tok)
+{
+    // x[y] == *(x+y)
+    // primary => x
+    Node *x = primary(&tok, tok);
+    // ( "[" expr "]" )*
+    while (equal(tok, "["))
+    {
+        Token *s = tok;
+        Node *y = expr(&tok, tok->next);
+        tok = skip(tok, "]");
+        Node *a = typeAdd(x, y, s);
+        x = newUnary(ND_DEREF, a, s);
+    }
+
+    *rest = tok;
+    return x;
 }
 
 // primary = "(" expr ")" | ident args? | num
@@ -807,8 +828,6 @@ static Node *primary(Token **rest, Token *tok)
     }
     errorTok(tok, "expected identifier or num");
 }
-
-
 
 // function = declspec declarator compoundStmt
 static Function *function(Token **rest, Token *tok)
