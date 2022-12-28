@@ -43,7 +43,7 @@ static Node *newNum(int val, Token *tok)
     return node;
 }
 
-// 新变量节点
+// 新变量节点 var可能是local也可能是global
 static Node *newVarNode(Obj *var, Token *tok)
 {
     Node *node = newNode(ND_VAR, tok);
@@ -65,6 +65,30 @@ static Obj *findLVar(Token *tok)
         }
     }
     return NULL;
+}
+
+// 在全局变量表中查找与tok->var匹配的变量
+static Obj *findGVar(Token *tok)
+{
+    for (Obj *var = globals; var; var = var->next)
+    {
+        // 首先判断长度，然后逐字符比较
+        if (strlen(var->name) == tok->len && !strncmp(var->name, tok->loc, tok->len))
+        {
+            return var;
+        }
+    }
+    return NULL;
+}
+
+static Obj *findVar(Token *tok)
+{
+    Obj *var = findLVar(tok);
+    if (var == NULL)
+    {
+        var = findGVar(tok);
+    }
+    return var;
 }
 
 // 构造一个变量类型
@@ -142,8 +166,8 @@ static void createParamLVars(Type *param)
 
 // 下面是程序的推导式
 
-// program = functionDefintion*
-// functionDefinition = declspec declarator compoundStmt
+// program = functionintion*
+// functioninition = declspec declarator compoundStmt
 
 // 类型系统
 // declspec = "int"
@@ -180,7 +204,9 @@ static Type *declarator(Token **rest, Token *tok, Type *ty);
 static Type *typeSuffix(Token **rest, Token *tok, Type *ty);
 static Type *funcParams(Token **rest, Token *tok, Type *ty);
 
-static Obj *function(Token **rest, Token *tok);
+static void function(Token **rest, Token *tok);
+static void globalDeclarationStmt(Token **rest, Token *tok);
+
 // 语句
 static Node *stmt(Token **rest, Token *tok);
 static Node *declarationStmt(Token **rest, Token *tok);
@@ -310,7 +336,7 @@ static Node *stmt(Token **rest, Token *tok)
     return exprStmt(rest, tok);
 }
 
-// declarationStmt = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*) ";"
+// declarationStmt = declspec declarator ("=" expr)? ("," declarator ("=" expr)?)* ";"
 // int x=1, *z=&x, y=*z=2;
 static Node *declarationStmt(Token **rest, Token *tok)
 {
@@ -323,9 +349,7 @@ static Node *declarationStmt(Token **rest, Token *tok)
     while (!equal(tok, ";"))
     {
         if (i++ > 0)
-        {
             tok = skip(tok, ",");
-        }
 
         // declarator
         Type *ty = declarator(&tok, tok, base);
@@ -843,7 +867,7 @@ static Node *primary(Token **rest, Token *tok)
         }
 
         // var: 普通变量 | 数组变量
-        Obj *var = findLVar(tok);
+        Obj *var = findVar(tok);
         if (!var)
         {
             errorTok(tok, "undefined variable");
@@ -863,7 +887,7 @@ static Node *primary(Token **rest, Token *tok)
 }
 
 // function = declspec declarator compoundStmt
-static Obj *function(Token **rest, Token *tok)
+static void function(Token **rest, Token *tok)
 {
     Type *ty = declspec(&tok, tok);
     ty = declarator(&tok, tok, ty);
@@ -883,10 +907,27 @@ static Obj *function(Token **rest, Token *tok)
     func->locals = locals;
 
     *rest = tok;
-    return func;
 }
 
-// program = function*
+// globalDeclarationStmt = declspec declarator (ident)? ("," declarator ident)*) ";"
+static void globalDeclarationStmt(Token **rest, Token *tok)
+{
+    Type *base = declspec(&tok, tok);
+
+    int i = 0;
+    while (!equal(tok, ";"))
+    {
+        if (i++ > 0)
+            tok = skip(tok, ",");
+
+        Type *ty = declarator(&tok, tok, base);
+        newGVar(getIdent(ty->tok), ty);
+    }
+    tok = skip(tok, ";");
+    *rest = tok;
+}
+
+// program = (function | globalVar)*
 Obj *parse(Token *tok)
 {
     // 清空全局变量
@@ -894,8 +935,18 @@ Obj *parse(Token *tok)
 
     while (tok->kind != TOK_EOF)
     {
-        // 构造函数 填充全局变量表
-        function(&tok, tok);
+        // 回溯测试
+        Token *startTok = tok;
+        Type *ty = declspec(&tok, tok);
+        ty = declarator(&tok, tok, ty);
+        tok = startTok;
+
+        if (ty->kind == TY_FUNC)
+            // 函数
+            function(&tok, tok);
+        else
+            // 全局变量
+            globalDeclarationStmt(&tok, tok);
     }
 
     return globals;

@@ -25,7 +25,7 @@ static void push()
 static void pop(char *reg)
 {
     // load double,
-    printf(" # [%d]出栈,保存到寄存器%s\n", depth, reg);
+    printf("# [%d]出栈,保存到寄存器%s\n", depth, reg);
     printf(" ld %s, 0(sp)\n", reg);
     printf(" addi sp, sp, 8\n");
     depth--;
@@ -42,32 +42,6 @@ static int alignTo(int n, int align)
     // }
     // return base * align;
     return ((n + align - 1) / align) * align;
-}
-
-static void assignLVarOffset(Obj *prog)
-{
-    // 为每一个函数的本地变量表分配栈空间
-    for (Obj *func = prog; func; func = func->next)
-    {
-        if (!func->isFunction)
-            continue;
-
-        printf("# =====为函数%s的本地变量表分配栈空间======\n", func->name);
-        int offset = 0;
-        // 遍历处理所有本地变量
-        for (Obj *var = func->locals; var; var = var->next)
-        {
-            // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
-            // 每个本地变量分配8个字节的固定空间
-            offset += var->ty->size;
-            // 栈向下增长。地址变小。offset是负数。
-            var->offset = -offset;
-            //
-            printf("# 为本地变量%s分配栈内偏移地址为(%d)fp, size:%d\n", var->name, var->offset, var->ty->size);
-        }
-        // 栈大小 调整为16字节对齐
-        func->stackSize = alignTo(offset, 16);
-    }
 }
 
 static int count()
@@ -102,7 +76,7 @@ static void store(void)
     // 左值地址弹栈
     pop("a1");
     // 此时a1为左值地址，a0为右值。将a0寄存器内存放的值，存储到a1地址指向的内存处。
-    printf(" # a0=mem[a1]\n");
+    printf("# a0=mem[a1]\n");
     printf(" sd a0, 0(a1)\n");
 };
 
@@ -112,12 +86,19 @@ static void genAddr(Node *node)
     switch (node->kind)
     {
     case ND_VAR:
-        // fp为栈帧起始地址
-        printf("# 加载变量%s的栈内地址到a0\n", node->var->name);
-        printf(" addi a0, fp, %d\n", node->var->offset);
-        // 此时a0的值为fp+offset。var的内存地址
+        if (node->var->isLocal)
+        {
+            // fp为栈帧起始地址
+            printf("# 加载局部变量%s的栈内地址到a0\n", node->var->name);
+            printf(" addi a0, fp, %d\n", node->var->offset);
+            // 此时a0的值为fp+offset。var的内存地址
+        }
+        else
+        {
+            printf("# 加载全局变量%s的地址到a0\n", node->var->name);
+            printf(" la a0, %s\n", node->var->name);
+        }
         return;
-        break;
     case ND_DEREF:
         // 解引用，与取地址抵消了
         genExpr(node->lhs);
@@ -136,7 +117,7 @@ static void genExpr(Node *node)
     {
     case ND_NUM:
         // return: a0=node->val
-        printf(" # 加载%d到a0\n", node->val);
+        printf("# 加载%d到a0\n", node->val);
         printf(" li a0, %d\n", node->val);
         return;
     case ND_VAR:
@@ -174,7 +155,7 @@ static void genExpr(Node *node)
         // 计算node的子树结果
         genExpr(node->lhs);
         // 此时子树的结果保存在a0中。
-        printf(" #对a0取相反数\n");
+        printf("#对a0取相反数\n");
         printf(" neg a0, a0\n");
         return;
     case ND_ADDR:
@@ -276,7 +257,7 @@ static void genStmt(Node *node)
         // 先计算子表达式值
         genStmt(node->lhs);
         // 程序返回: 跳转到标签处
-        printf(" # 跳转到.L.return.%s段\n", currentFn->name);
+        printf("# 跳转到.L.return.%s段\n", currentFn->name);
         printf(" j .L.return.%s\n", currentFn->name);
         return;
     case ND_BLOCK:
@@ -350,22 +331,62 @@ static void genStmt(Node *node)
     errorTok(node->tok, "invalid statment");
 }
 
-void codegen(Obj *prog)
+static void assignLVarOffset(Obj *prog)
 {
-    // printf("# ========栈帧分配: 本地变量表==========\n");
-    // 在栈中分配变量表的内存空间: 映射变量和栈地址
-    assignLVarOffset(prog);
+    // 为每一个函数的本地变量表分配栈空间
+    for (Obj *func = prog; func; func = func->next)
+    {
+        if (!func->isFunction)
+            continue;
 
+        printf("# =====为函数%s的本地变量表分配栈空间======\n", func->name);
+        int offset = 0;
+        // 遍历处理所有本地变量
+        for (Obj *var = func->locals; var; var = var->next)
+        {
+            // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
+            // 每个本地变量分配8个字节的固定空间
+            offset += var->ty->size;
+            // 栈向下增长。地址变小。offset是负数。
+            var->offset = -offset;
+            //
+            printf("# 为本地变量%s分配栈内偏移地址为(%d)fp, size:%d\n", var->name, var->offset, var->ty->size);
+        }
+        // 栈大小 调整为16字节对齐
+        func->stackSize = alignTo(offset, 16);
+    }
+}
+
+// 为全局变量分配数据段
+static void emitData(Obj *prog)
+{
+    for (Obj *var = prog; var; var = var->next)
+    {
+        if (var->isFunction || var->isLocal)
+            continue;
+
+        printf(" .data\n");
+        printf(" .globl %s\n", var->name);
+        printf("# 全局变量%s\n", var->name);
+        printf("%s:\n", var->name);
+        printf("# 零填充%d位\n", var->ty->size);
+        printf(" .zero %d\n", var->ty->size);
+    }
+}
+
+// 代码段
+static void emitText(Obj *prog)
+{
     // 遍历每一个函数，进行代码生成
     for (Obj *func = prog; func; func = func->next)
     {
         if (!func->isFunction)
             continue;
-    
+
         // 声明全局main段: 程序入口段
         printf("\n# ==========%s段开始================\n", func->name);
         printf("# 声明全局%s段\n", func->name);
-        printf(" .global %s\n", func->name);
+        printf(" .globl %s\n", func->name);
         printf("%s:\n", func->name);
 
         // 全局函数指针
@@ -418,21 +439,21 @@ void codegen(Obj *prog)
         genStmt(func->body);
 
         // return标签
-        printf(" # return段标签\n");
+        printf("# return段标签\n");
         printf(".L.return.%s:\n", func->name);
         printf("# ========%s段结束==========\n", func->name);
 
         // Epilogue 后语
         printf("# ========上下文恢复: 寄存器==========\n");
         // 恢复sp
-        printf(" # 恢复sp, 从fp中\n");
+        printf("# 恢复sp, 从fp中\n");
         printf(" mv sp, fp\n");
         // 恢复fp
-        printf(" # 恢复fp, 从栈中\n");
+        printf("# 恢复fp, 从栈中\n");
         printf(" ld fp, 0(sp)\n");
         printf(" addi sp, sp, 8\n");
         // 恢复ra
-        printf(" # 恢复ra\n");
+        printf("# 恢复ra\n");
         printf(" ld ra, 0(sp)\n");
         printf(" addi sp, sp, 8\n");
 
@@ -443,4 +464,14 @@ void codegen(Obj *prog)
         printf("# 将a0值返回给系统调用\n");
         printf(" ret\n");
     }
+}
+
+void codegen(Obj *prog)
+{
+    // 在栈中分配变量表的内存空间: 映射变量和栈地址
+    assignLVarOffset(prog);
+    // 数据段
+    emitData(prog);
+    // 代码段
+    emitText(prog);
 }
