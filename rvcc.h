@@ -128,7 +128,8 @@ bool consume(Token **rest, Token *tok, char *str);
 // 类型系统
 // 类型枚举
 typedef enum {
-    TY_INT,     // 整数
+    TY_CHAR,    // char
+    TY_INT,     // int
     TY_PTR,     // 指针
     TY_FUNC,    // 函数
     TY_ARRAY,   // 数组
@@ -153,8 +154,11 @@ struct Type {
 
 // 全局变量 定义在type.c中
 extern Type *tyInt;
+extern Type *tyChar;
 // 判断类型是否是整型
 bool isInteger(Type *type);
+// 判断Token是否是Type的关键字
+bool isKeywordType(Token *tok);
 // 为node节点及其所有字节点 递归的添加类型。
 void addType(Node *node);
 // 新建指针类型

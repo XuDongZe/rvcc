@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     }
 
     char *currentInput = argv[1];
-    // char *currentInput = "int x; int main() { return x; }";
+    // char *currentInput = "int main() { return sub_char(7, 3, 3); } int sub_char(char a, char b, char c) { return a-b-c; }";
 
     printf("# %s\n\n", currentInput);
 

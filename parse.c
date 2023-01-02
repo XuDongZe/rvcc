@@ -170,7 +170,7 @@ static void createParamLVars(Type *param)
 // functioninition = declspec declarator compoundStmt
 
 // 类型系统
-// declspec = "int"
+// declspec = "int" | "char"
 // declarator = "*"* ident typeSuffix
 // typeSuffix = ( "(" funcParams? ")" | "[" num "]" )?
 // funcParams = param ("," param)*
@@ -228,11 +228,16 @@ static Node *unary(Token **rest, Token *tok);
 static Node *postfix(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
-// declspec = "int"
+// declspec = "int" | "char"
 static Type *declspec(Token **rest, Token *tok)
 {
-    *rest = skip(tok, "int");
-    return tyInt;
+    if (equal(tok, "int"))
+    {
+        *rest = tok->next;
+        return tyInt;
+    }
+    *rest = skip(tok, "char");
+    return tyChar;
 }
 
 // declarator = "*"* ident typeSuffix
@@ -405,7 +410,7 @@ static Node *compoundStmt(Token **rest, Token *tok)
     while (!equal(tok, "}"))
     {
         // declarationStmt
-        if (equal(tok, "int"))
+        if (isKeywordType(tok))
             cur->next = declarationStmt(&tok, tok);
         // stmt
         else
@@ -683,7 +688,7 @@ static Node *typeSub(Node *lhs, Node *rhs, Token *tok)
     {
         Node *diff = newBinary(ND_SUB, lhs, rhs, tok);
         // 类型隐式转换为int
-        diff->type = TY_INT;
+        diff->type = tyInt;
         // 返回两个指针之间有多少元素
         return newBinary(ND_DIV, diff, newNum(8, tok), tok);
     }

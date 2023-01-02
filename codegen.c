@@ -56,7 +56,7 @@ static void genStmt(Node *node);
 // 访问a0（为一个地址）指向的栈地址中存储的数据，加载到a0
 static void load(Node *node);
 // 将栈顶值(为一个地址)存入a0
-static void store(void);
+static void store(Type *ty);
 
 // 访问a0地址中存储的数据，加载到a0
 static void load(Node *node)
@@ -67,17 +67,23 @@ static void load(Node *node)
         return;
     }
     printf("# a0=mem[a0]\n");
-    printf(" ld a0, 0(a0)\n");
+    if (node->type->size == 1)
+        printf(" lb a0, 0(a0)\n");
+    else
+        printf(" ld a0, 0(a0)\n");
 }
 
 // 将栈顶值(为一个地址)存入a0
-static void store(void)
+static void store(Type *ty)
 {
     // 左值地址弹栈
     pop("a1");
     // 此时a1为左值地址，a0为右值。将a0寄存器内存放的值，存储到a1地址指向的内存处。
     printf("# a0=mem[a1]\n");
-    printf(" sd a0, 0(a1)\n");
+    if (ty->size == 1)
+        printf(" sb a0, 0(a1)\n");
+    else
+        printf(" sd a0, 0(a1)\n");
 };
 
 // 计算给定节点的绝对地址：变量，函数，指针
@@ -177,7 +183,8 @@ static void genExpr(Node *node)
         push();
         // 将右值保存到a0
         genExpr(node->rhs);
-        store();
+        // 按照左边值的类型进行内存选择
+        store(node->lhs->type);
         return;
     default:
         break;
@@ -432,7 +439,10 @@ static void emitText(Obj *prog)
         {
             // FUNCALL指令中 call汇编指令调用之前 第一个实参保存在a0中，第二个保存在a1中，以此类推
             printf("# 从寄存器%s中加载参数%s到栈中\n", argRegs[i], param->name);
-            printf("sd %s, %d(fp)\n", argRegs[i++], param->offset);
+            if (param->ty->size == 1)
+                printf(" sb %s, %d(fp)\n", argRegs[i++], param->offset);
+            else
+                printf(" sd %s, %d(fp)\n", argRegs[i++], param->offset);
         }
 
         printf("# ========%s段主体代码==========\n", func->name);

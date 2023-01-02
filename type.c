@@ -3,11 +3,20 @@
 // (Type){...}构造了一个复合字面量，相当于Type的匿名变量。
 // TypeKind = TY_INIT, size = 8
 Type *tyInt = &(Type){TY_INT, 8};
+Type *tyChar = &(Type){TY_CHAR, 1};
 
 // 判断给定type是否是整型
 bool isInteger(Type *ty)
 {
-    return ty->kind == TY_INT;
+    return ty->kind == TY_INT || ty->kind == TY_CHAR;
+}
+
+// 判断给定tok是否是Type类型
+bool isKeywordType(Token *tok) {
+    if (tok->kind != TOK_KEKWORD) {
+        return false;
+    }
+    return equal(tok, "int") || equal(tok, "char");
 }
 
 // 构造指针类型
