@@ -338,6 +338,43 @@ static void genStmt(Node *node)
     errorTok(node->tok, "invalid statment");
 }
 
+static void loadRealParams(Obj *func)
+{
+    printf("# ===加载%s的实参列表(从寄存器加载到栈中)===\n", func->name);
+    int i = 0;
+    for (Obj *param = func->params; param; param = param->next)
+    {
+        // FUNCALL指令中 call汇编指令调用之前 第一个实参保存在a0中，第二个保存在a1中，以此类推
+        printf("# 从寄存器%s中加载参数%s到栈中\n", argRegs[i], param->name);
+        if (param->ty->size == 1)
+            printf(" sb %s, %d(fp)\n", argRegs[i++], param->offset);
+        else
+            printf(" sd %s, %d(fp)\n", argRegs[i++], param->offset);
+    }
+}
+
+static void assignLVarOffsetForOneFunc(Obj *func)
+{
+    printf("# =====为函数%s的本地变量表分配栈空间======\n", func->name);
+    int offset = 0;
+    // 遍历处理所有本地变量 包含形式参数
+    for (Obj *var = func->locals; var; var = var->next)
+    {
+        // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
+        // 每个本地变量分配8个字节的固定空间
+        offset += var->ty->size;
+        // 栈向下增长。地址变小。offset是负数。
+        var->offset = -offset;
+        //
+        printf("# 为本地变量%s分配栈内偏移地址为(%d)fp, size:%d\n", var->name, var->offset, var->ty->size);
+    }
+    // 设置函数本地变量栈大小 调整为16字节对齐
+    func->stackSize = alignTo(offset, 16);
+    // 调整栈顶指针
+    printf("# 调整栈顶指针(对齐到16字节)\n");
+    printf(" addi sp, sp, -%d\n", func->stackSize);
+}
+
 static void assignLVarOffset(Obj *prog)
 {
     // 为每一个函数的本地变量表分配栈空间
@@ -345,39 +382,42 @@ static void assignLVarOffset(Obj *prog)
     {
         if (!func->isFunction)
             continue;
-
-        printf("# =====为函数%s的本地变量表分配栈空间======\n", func->name);
-        int offset = 0;
-        // 遍历处理所有本地变量
-        for (Obj *var = func->locals; var; var = var->next)
-        {
-            // todo: locals为语法树节点，头插法构建。链表中第一个var为最后处理的ast节点。也就是token表中的顺序。
-            // 每个本地变量分配8个字节的固定空间
-            offset += var->ty->size;
-            // 栈向下增长。地址变小。offset是负数。
-            var->offset = -offset;
-            //
-            printf("# 为本地变量%s分配栈内偏移地址为(%d)fp, size:%d\n", var->name, var->offset, var->ty->size);
-        }
-        // 栈大小 调整为16字节对齐
-        func->stackSize = alignTo(offset, 16);
+        assignLVarOffsetForOneFunc(func);
     }
 }
 
 // 为全局变量分配数据段
 static void emitData(Obj *prog)
 {
+    printf(" # 为全局变量分配数据段\n");
     for (Obj *var = prog; var; var = var->next)
     {
         if (var->isFunction || var->isLocal)
             continue;
 
         printf(" .data\n");
-        printf(" .globl %s\n", var->name);
-        printf("# 全局变量%s\n", var->name);
-        printf("%s:\n", var->name);
-        printf("# 零填充%d位\n", var->ty->size);
-        printf(" .zero %d\n", var->ty->size);
+
+        if (var->initData)
+        {
+            printf("# 字符串字面量\n");
+            printf("%s:\n", var->name);
+            for (int i = 0; i < var->ty->size; i++)
+            {
+                char ch = var->initData[i];
+                if (isprint(ch))
+                    printf(" .byte %d\t#%c\n", ch, ch);
+                else
+                    printf(" .byte %d\n", ch);
+            }
+        }
+        else
+        {
+            printf(" .globl %s\n", var->name);
+            printf("# 全局变量%s\n", var->name);
+            printf("%s:\n", var->name);
+            printf("# 零填充%d位\n", var->ty->size);
+            printf(" .zero %d\n", var->ty->size);
+        }
     }
 }
 
@@ -390,10 +430,13 @@ static void emitText(Obj *prog)
         if (!func->isFunction)
             continue;
 
-        // 声明全局main段: 程序入口段
-        printf("\n# ==========%s段开始================\n", func->name);
-        printf("# 声明全局%s段\n", func->name);
+        printf("\n# 声明全局%s段\n", func->name);
         printf(" .globl %s\n", func->name);
+
+        printf("# 代码段标签\n");
+        printf(" .text\n");
+
+        printf("\n# ==========%s段开始================\n", func->name);
         printf("%s:\n", func->name);
 
         // 全局函数指针
@@ -429,21 +472,11 @@ static void emitText(Obj *prog)
         printf("# 加载sp到fp\n");
         printf(" mv fp, sp\n");
 
-        // 调整栈顶指针
-        printf("# 分配本地变量表栈空间(对齐到16字节)\n");
-        printf(" addi sp, sp, -%d\n", func->stackSize);
+        // 为函数的本地变量表中的 每一个本地变量 分配栈空间
+        assignLVarOffsetForOneFunc(func);
 
-        printf("# ===将预先存储的实参列表从寄存器加载到对应的栈空间中===\n");
-        int i = 0;
-        for (Obj *param = func->params; param; param = param->next)
-        {
-            // FUNCALL指令中 call汇编指令调用之前 第一个实参保存在a0中，第二个保存在a1中，以此类推
-            printf("# 从寄存器%s中加载参数%s到栈中\n", argRegs[i], param->name);
-            if (param->ty->size == 1)
-                printf(" sb %s, %d(fp)\n", argRegs[i++], param->offset);
-            else
-                printf(" sd %s, %d(fp)\n", argRegs[i++], param->offset);
-        }
+        // 从寄存器(函数调用约定)中 加载 函数的实际参数 分配的函数栈中(参数作为自动变量的一种 使用栈存储)
+        loadRealParams(func);
 
         printf("# ========%s段主体代码==========\n", func->name);
         genStmt(func->body);
@@ -478,10 +511,10 @@ static void emitText(Obj *prog)
 
 void codegen(Obj *prog)
 {
-    // 在栈中分配变量表的内存空间: 映射变量和栈地址
-    assignLVarOffset(prog);
+    // // 在栈中分配变量表的内存空间: 映射变量和栈地址
+    // assignLVarOffset(prog);
     // 数据段
     emitData(prog);
-    // 代码段
+    // 代码段`
     emitText(prog);
 }

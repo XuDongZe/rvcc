@@ -9,13 +9,11 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    char *currentInput = argv[1];
-    // char *currentInput = "int main() { return sub_char(7, 3, 3); } int sub_char(char a, char b, char c) { return a-b-c; }";
-
-    printf("# %s\n\n", currentInput);
+    char *s = argv[1];
+    // char *s = "int main() { return \"\"[0]; }";
 
     // 词法分析
-    Token *tok = tokenize(currentInput);
+    Token *tok = tokenize(s);
 
     // 语法分析
     Obj *prog = parse(tok);

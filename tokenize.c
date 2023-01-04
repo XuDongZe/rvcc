@@ -173,6 +173,24 @@ static void convertKeyWord(Token *tok)
     }
 }
 
+Token *readStringLiteral(char *p)
+{
+    char *start = p;
+    // skip "
+    p++;
+    while (*p != '"')
+        p++;
+    // now *p == '"'
+    // start is left-'"' and p is right-'"'
+
+    // if str is "", then tok->len = 2
+    // if str is "a",then tok->len = 3
+    Token *tok = newToken(TOK_STR, start, p + 1);
+    // tok->str = "abc"
+    tok->str = strndup(start + 1, p - start - 1);
+    return tok;
+}
+
 // 接口函数
 Token *tokenize(char *input)
 {
@@ -188,6 +206,13 @@ Token *tokenize(char *input)
         if (isspace(*p))
         {
             p++;
+            continue;
+        }
+        // 解析字符串
+        if (*p == '"')
+        {
+            cur = cur->next = readStringLiteral(p);
+            p += cur->len;
             continue;
         }
         // 解析数字

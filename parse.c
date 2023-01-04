@@ -126,6 +126,19 @@ static Obj *newGVar(char *name, Type *ty)
     return var;
 }
 
+static char *newUniqAnoiName()
+{
+    static int i = 0;
+    char *buf = calloc(1, 20);
+    sprintf(buf, ".L..%d", i++);
+    return buf;
+}
+
+static Obj *newAnoiGVar(Type *ty)
+{
+    return newGVar(newUniqAnoiName(), ty);
+}
+
 // 获取tok中的标识符副本
 static char *getIdent(Token *tok)
 {
@@ -835,7 +848,7 @@ static Node *postfix(Token **rest, Token *tok)
     return x;
 }
 
-// primary = "(" expr ")" | "sizeof" unary | ident args? | num
+// primary = "(" expr ")" | "sizeof" unary | str | ident args? | num
 // args = "(" ")"
 static Node *primary(Token **rest, Token *tok)
 {
@@ -859,6 +872,18 @@ static Node *primary(Token **rest, Token *tok)
             // 2. 返回node的type的size
             return newNum(node->type->size, tok);
         }
+    }
+    if (tok->kind == TOK_STR)
+    {
+        // -2 for tok->len include two '"' char, and then append an extra '\0'
+        Type *ty = newArrayType(tyChar, tok->len - 1);
+        // 将字符串字面量放置到全局变量中
+        Obj *obj = newAnoiGVar(ty);
+        // 将字符串字面量保存到obj中
+        obj->initData = tok->str;
+
+        *rest = tok->next;
+        return newVarNode(obj, tok);
     }
     // ident
     if (tok->kind == TOK_IDENT)

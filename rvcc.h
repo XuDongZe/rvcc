@@ -19,7 +19,8 @@ typedef enum
     TOK_IDENT,      // 标记符号，变量名/函数名等。
     TOK_PUNCT,      // 操作符号
     TOK_KEKWORD,    // 关键字
-    TOK_NUM,        // 数字
+    TOK_NUM,        // 数字 | char
+    TOK_STR,        // 字符传字面量
     TOK_EOF,        // 文件终止符
 } TokenKind;
 
@@ -30,6 +31,7 @@ typedef struct Token
     long val;
     char *loc; // 在当前解析的字符串内的起始位置
     int len;   // 字符长度
+    char *str;  // 保存STR类型的值
 } Token;
 
 // 语法分析：
@@ -59,6 +61,9 @@ struct Obj
     Node *body;     // 函数体
     Obj *locals;    // 本地变量表
     int stackSize;  // 进入函数时，动态计算的栈大小
+
+    // 初始化数据
+    char *initData; // 字符串字面量 初始化
 };
 
 typedef enum
@@ -78,7 +83,7 @@ typedef enum
     ND_EXPR_STMT,   // 表达式语句
     ND_IF,          // if语句
     ND_FOR,         // for语句 while语句
-    ND_VAR,         // 变量 普通变量|数组变量
+    ND_VAR,         // 变量 普通变量|数组变量|字符串字面量(char[])
     ND_FUNCALL,     // 函数调用
     ND_DEREF,       // 解除引用 *
     ND_ADDR,        // 取地址 &
