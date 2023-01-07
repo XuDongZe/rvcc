@@ -129,8 +129,7 @@ static Obj *newGVar(char *name, Type *ty)
 static char *newUniqAnoiName()
 {
     static int i = 0;
-    char *buf = calloc(1, 20);
-    sprintf(buf, ".L..%d", i++);
+    char *buf = format(".L..%d", i++);
     return buf;
 }
 

@@ -175,6 +175,12 @@ Type *newArrayType(Type *base, int len);
 // 复制类型
 Type *copyType(Type *ty);
 
+
+// 定义在string.c中
+
+// 格式化字符串
+char *format(char *fmt, ...);
+
 // // 全局变量表: 全局变量 | 函数
 // // 定义在parse.c中
 // extern Obj *globals;
