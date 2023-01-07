@@ -28,10 +28,14 @@ typedef struct Token
 {
     TokenKind kind;
     struct Token *next;
+    
     long val;
+  
     char *loc; // 在当前解析的字符串内的起始位置
     int len;   // 字符长度
+  
     char *str;  // 保存STR类型的值
+    int strLen; // STR类型的长度，包括\0
 } Token;
 
 // 语法分析：

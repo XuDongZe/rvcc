@@ -173,21 +173,83 @@ static void convertKeyWord(Token *tok)
     }
 }
 
-Token *readStringLiteral(char *p)
+static char *readStringLiteralEnd(char *p)
 {
     char *start = p;
-    // skip "
-    p++;
     while (*p != '"')
+    {
+        if (*p == '\n' || *p == '\0')
+            errorAt(start, "unclosed string literal");
+        // if first ch is '\' then the next ch is assoiated with '\'
+        if (*p == '\\')
+            // i.e. \"
+            p++;
         p++;
+    }
     // now *p == '"'
-    // start is left-'"' and p is right-'"'
+    return p;
+}
+
+static char escapedFromChar(char ch)
+{
+    switch (ch)
+    {
+    case 'a': // 响铃（警报）
+        return '\a';
+    case 'b': // 退格
+        return '\b';
+    case 't': // 水平制表符，tab
+        return '\t';
+    case 'n': // 换行
+        return '\n';
+    case 'v': // 垂直制表符
+        return '\v';
+    case 'f': // 换页
+        return '\f';
+    case 'r': // 回车
+        return '\r';
+    // 属于GNU C拓展
+    case 'e': // 转义符
+        return 27;
+    default: // 默认将原字符返回
+        return ch;
+    }
+}
+
+// start is left-'"'
+static Token *readStringLiteral(char *start)
+{
+    // end is right-'"'
+    char *end = readStringLiteralEnd(start + 1);
+    // new char[] to store escaped-str, for "", end-start is 1
+    char *buf = calloc(1, end - start);
+
+    // 遍历处理字符串中的转义字符
+    char *p = start + 1;
+    int len = 0;
+    while (p < end)
+    {
+        if (*p == '\\')
+        {
+            char ch = escapedFromChar(*(p + 1));
+            buf[len++] = ch;
+            p += 2;
+        }
+        else
+        {
+            buf[len++] = *p;
+            p += 1;
+        }
+    }
+    buf[len++] = '\0';
+    // now p is end, buf is escaped-str
 
     // if str is "", then tok->len = 2
     // if str is "a",then tok->len = 3
-    Token *tok = newToken(TOK_STR, start, p + 1);
+    Token *tok = newToken(TOK_STR, start, end + 1);
     // tok->str = "abc"
-    tok->str = strndup(start + 1, p - start - 1);
+    tok->str = buf;
+    tok->strLen = len;
     return tok;
 }
 

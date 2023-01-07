@@ -874,8 +874,7 @@ static Node *primary(Token **rest, Token *tok)
     }
     if (tok->kind == TOK_STR)
     {
-        // -2 for tok->len include two '"' char, and then append an extra '\0'
-        Type *ty = newArrayType(tyChar, tok->len - 1);
+        Type *ty = newArrayType(tyChar, tok->strLen);
         // 将字符串字面量放置到全局变量中
         Obj *obj = newAnoiGVar(ty);
         // 将字符串字面量保存到obj中
